@@ -8,27 +8,35 @@ from typing import Any, List, Tuple
 import rospy
 from rospy_util.controller import Cmd, Controller, Sub
 
+from controller.cmd import RobotAction
 import controller.cmd as cmd
 import controller.sub as sub
-from q_learning_project.msg import RobotMoveDBToBlock
 
 ### Model ###
 
 
 @dataclass
 class Model:
-    actions: List[RobotMoveDBToBlock]
+    actions: List[RobotAction]
     rewards: List[int]
 
 
 init_model: Model = Model(
     actions=[
-        RobotMoveDBToBlock(robot_db="red", block_id=1),
-        RobotMoveDBToBlock(robot_db="green", block_id=2),
-        RobotMoveDBToBlock(robot_db="blue", block_id=3),
+        RobotAction(robot_db="green", block_id=2),
+        RobotAction(robot_db="blue", block_id=3),
     ],
     rewards=[],
 )
+
+init_cmds: List[Cmd[Any]] = [
+    cmd.robot_action(
+        RobotAction(robot_db="red", block_id=1),
+        initial=True,
+    ),
+]
+
+init: Tuple[Model, List[Cmd[Any]]] = (init_model, init_cmds)
 
 
 ### Messages ###
@@ -49,7 +57,7 @@ def update(msg: Reward, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     print(model.actions)
 
     if not model.actions:
-        return (replace(model, rewards=rewards), [])
+        return (replace(model, rewards=rewards), cmd.none)
 
     (action, *rest) = model.actions
 
@@ -75,7 +83,7 @@ def run() -> None:
     rospy.init_node("q_learning")
 
     Controller.run(
-        model=init_model,
+        init=init,
         update=update,
         subscriptions=subscriptions,
     )
