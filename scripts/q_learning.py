@@ -10,7 +10,7 @@ from rospy_util.controller import Cmd, Controller, Sub
 
 import controller.cmd as cmd
 import controller.sub as sub
-from q_learning_project.msg import RobotMoveDBToBlock, QLearningReward
+from q_learning_project.msg import RobotMoveDBToBlock
 
 ### Model ###
 
@@ -18,7 +18,7 @@ from q_learning_project.msg import RobotMoveDBToBlock, QLearningReward
 @dataclass
 class Model:
     actions: List[RobotMoveDBToBlock]
-    rewards: List[QLearningReward]
+    rewards: List[int]
 
 
 init_model: Model = Model(
@@ -31,18 +31,28 @@ init_model: Model = Model(
 )
 
 
+### Messages ###
+
+
+@dataclass
+class Reward:
+    reward: int
+
+
 ### Update ###
 
 
-def update(reward: QLearningReward, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
-    rewards = [reward, *model.rewards]
+def update(msg: Reward, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
+    rewards = [msg.reward, *model.rewards]
 
     print(rewards)
+    print(model.actions)
 
     if not model.actions:
         return (replace(model, rewards=rewards), [])
 
     (action, *rest) = model.actions
+
     return (
         Model(actions=rest, rewards=rewards),
         [cmd.robot_action(action)],
@@ -52,9 +62,9 @@ def update(reward: QLearningReward, model: Model) -> Tuple[Model, List[Cmd[Any]]
 ### Subscriptions ###
 
 
-def subscriptions(_: Model) -> List[Sub[Any, QLearningReward]]:
+def subscriptions(_: Model) -> List[Sub[Any, Reward]]:
     return [
-        sub.q_learning_reward(lambda r: r),
+        sub.q_learning_reward(lambda msg: Reward(msg.reward)),
     ]
 
 
