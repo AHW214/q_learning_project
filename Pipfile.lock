@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "57a6773a4f513e9cf2c9a30c19120bd5ea485bbe4ab6d21cf5a1f25e0c5719b7"
+            "sha256": "a55eeaf02fe36eaa524f61d8f4188ef6e506107679cef1835ca7eec37be100dc"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -238,7 +238,7 @@
         "rospy-util": {
             "editable": true,
             "git": "https://github.com/AHW214/rospy-util.git",
-            "ref": "eaf883ac2786ba0f736bccc87b6ed721d62bbd5d"
+            "ref": "a5141c539a8cdd693c0552fd93e16d53bd286f3d"
         },
         "sensor-msgs": {
             "hashes": [

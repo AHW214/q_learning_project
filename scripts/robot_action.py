@@ -2,8 +2,9 @@
 
 # pyright: reportMissingTypeStubs=false
 
-from dataclasses import dataclass
-from typing import Any, List, Tuple, Union
+from dataclasses import dataclass, replace
+from enum import Enum
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import LaserScan
@@ -12,21 +13,35 @@ from rospy_util.controller import Cmd, Controller, Sub
 
 import controller.cmd as cmd
 import controller.sub as sub
-from data.image import ImageROS
+from data.image import ImageHSV, ImageROS
 import data.image as image
-from perception.color import center_of_color
+import perception.color as color
 
 ### Model ###
+
+Locator = Callable[[ImageHSV], Optional[Tuple[int, int]]]
+
+
+class State(Enum):
+    locate = 1
+    face = 2
+    approach = 3
 
 
 @dataclass
 class Model:
     cvBridge: CvBridge
+    locator: Locator
+    state: State
 
 
 init_model: Model = Model(
     cvBridge=CvBridge(),
+    locator=color.locate_green,
+    state=State.locate,
 )
+
+init: Tuple[Model, List[Cmd[Any]]] = (init_model, [cmd.turn(0.2)])
 
 
 ### Messages ###
@@ -49,20 +64,42 @@ Msg = Union[Camera, Scanner]
 
 
 def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
-
-    if isinstance(msg, Camera):
-        imageHSV = image.from_ros_image(model.cvBridge, msg.image)
-        center = center_of_color(
-            lower_bound=(74, 128, 64),
-            upper_bound=(0, 255, 42),
-            image=imageHSV,
-        )
-
-        print(center)
-
+    if isinstance(msg, Scanner):
         return (model, cmd.none)
 
-    print("scan")
+    imageHSV = image.from_ros_image(model.cvBridge, msg.image)
+    location = model.locator(imageHSV)
+
+    if model.state == State.locate:
+        if location is None:
+            return (model, [cmd.turn(0.2)])
+
+        return (replace(model, state=State.face), cmd.none)
+
+    if model.state == State.face:
+        if location is None:
+            return (replace(model, state=State.locate), [cmd.stop])
+
+        (cx, _) = location
+
+        err = (imageHSV.width / 2) - cx
+
+        if err < 10:
+            return (replace(model, state=State.approach), [cmd.stop])
+
+        k_p = 1.0 / 500.0
+        return (model, [cmd.turn(k_p * err)])
+
+    if model.state == State.approach:
+        if location is None:
+            return (replace(model, state=State.locate), [cmd.stop])
+
+        (cx, _) = location
+        err = (imageHSV.width / 2) - cx
+        k_p = 1.0 / 100.0
+
+        return (model, [cmd.velocity(linear=0.5, angular=k_p * err)])
+
     return (model, cmd.none)
 
 
@@ -83,7 +120,7 @@ def run() -> None:
     rospy.init_node("q_learning_robot_action")
 
     Controller.run(
-        model=init_model,
+        init=init,
         update=update,
         subscriptions=subscriptions,
     )
