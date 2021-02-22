@@ -1,6 +1,6 @@
 # pyright: reportMissingTypeStubs=false
 
-from typing import Callable, Dict, NewType, Optional, Tuple
+from typing import Dict, NewType, Optional, Tuple
 
 import cv2
 from numpy import array, uint8
