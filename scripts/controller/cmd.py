@@ -7,11 +7,12 @@ from q_learning_project.msg import QMatrix, RobotMoveDBToBlock
 RobotAction = RobotMoveDBToBlock
 
 
-def robot_action(action: RobotAction) -> Cmd[RobotAction]:
+def robot_action(action: RobotAction, initial: bool = False) -> Cmd[RobotAction]:
     return Cmd(
         topic_name="/q_learning/robot_action",
         message_type=RobotAction,
         message_value=action,
+        latch_publisher=initial,
     )
 
 
