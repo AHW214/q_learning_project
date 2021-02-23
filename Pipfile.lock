@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "a55eeaf02fe36eaa524f61d8f4188ef6e506107679cef1835ca7eec37be100dc"
+            "sha256": "9875d7ffd48004dcca800131999ea2aaae2584d814923b9540c97d944eae048c"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -261,6 +261,7 @@
                 "sha256:0bfddd1ab601f1a8ab6c45e30f036ed73dd23cf3c9841206c6b75099741be501",
                 "sha256:726309eeb105fff725dd7057e532144fbeb24c2fd7c0356c4a5b41e37b59c07f"
             ],
+            "index": "rospypi",
             "version": "==0.5.13.post0"
         }
     },
