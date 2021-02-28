@@ -2,7 +2,7 @@
 
 ### Gif
 ![Example showing manipulator orienting toward dumbbell, picking it up, moving it, and putting it down.](Manipulate.gif)
-**Team: Elizabeth Singer and Adam Weider**
+**Team: Elizabeth Singer, Adam Weider, and Katie Hughes **
 
 # Implementation plan
 
