@@ -30,15 +30,15 @@ Describe how you accomplished each of the following components of the robot mani
 ![Example showing manipulator orienting toward dumbbell, picking it up, moving it, and putting it down.](Manipulate.gif)
 
 ### Moving to the right spot in order to pick up a dumbbell
-The perception code uses color perception to identify the correct color dumbbell to approach using a combination of the camera and the laser scanner and proportional control. Once within half a meter of the appropriate colored dumbbell, the lift method in movearm.py uses the laser scanner to align the robot to point directly at the center of the dumbbell using proportional angular/rotational control and then uses proportional distance control to approach the dumbbell.
-Functions involved: face_dumbbell is a method within the robot node that uses proportional angular control to orient the robot so that the handle of the dumbbell is exactly centered in front of the robot. Laser scan messages and twist messages are used to update the range data in this method and to update and control the positioning of the robot. 
+-The perception code uses color perception to identify the correct color dumbbell to approach using a combination of the camera and the laser scanner and proportional control. Once within half a meter of the appropriate colored dumbbell, the lift method in movearm.py uses the laser scanner to align the robot to point directly at the center of the dumbbell using proportional angular/rotational control and then uses proportional distance control to approach the dumbbell.
+-Functions involved: face_dumbbell is a method within the robot node that uses proportional angular control to orient the robot so that the handle of the dumbbell is exactly centered in front of the robot. Laser scan messages and twist messages are used to update the range data in this method and to update and control the positioning of the robot. 
 
 ### Picking up the dumbbell
-Once properly aligned and at a sufficient distance from the dumbbell, the manipulator arm is placed into a position where it can grab the center of the dumbbell. Using proportional control and forward motion the robot approaches until the gripper is properly around the handle of the dumbbell. Angular and distance control are used for this precise movement. The gripper is closed and the manipulator raises the dumbbell to a position where it can be carried without falling. 
+-Once properly aligned and at a sufficient distance from the dumbbell, the manipulator arm is placed into a position where it can grab the center of the dumbbell. Using proportional control and forward motion the robot approaches until the gripper is properly around the handle of the dumbbell. Angular and distance control are used for this precise movement. The gripper is closed and the manipulator raises the dumbbell to a position where it can be carried without falling. 
 
 ### Moving to the desired destination (numbered block) with the dumbbell
 ### Putting the dumbbell back down at the desired destination
-Once oriented in front of the correct block a calculated sequence of motions are used to lower the dumbbell to the ground, open the manipulator arm, and then move back slowly to leave the dumbbell in an upright position in front of the appropriate block. 
+-Once oriented in front of the correct block a calculated sequence of motions are used to lower the dumbbell to the ground, open the manipulator arm, and then move back slowly to leave the dumbbell in an upright position in front of the appropriate block. 
 
 ## Challenges
 (1 paragraph): Describe the challenges you faced and how you overcame them.
