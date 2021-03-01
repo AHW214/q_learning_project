@@ -65,7 +65,7 @@ class Reward:
 
 ### Update ###
 
-CONVERGENCE_THRESH: int = 50
+CONVERGENCE_THRESH: int = 75
 LEARNING_RATE: float = 1.0
 DISCOUNT_FACTOR: float = 0.5
 
