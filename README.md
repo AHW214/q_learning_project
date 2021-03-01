@@ -31,6 +31,7 @@ Describe how you accomplished each of the following components of the robot mani
 
 ### Moving to the right spot in order to pick up a dumbbell
 -The perception code uses color perception to identify the correct color dumbbell to approach using a combination of the camera and the laser scanner and proportional control. Once within half a meter of the appropriate colored dumbbell, the lift method in movearm.py uses the laser scanner to align the robot to point directly at the center of the dumbbell using proportional angular/rotational control and then uses proportional distance control to approach the dumbbell.
+
 -Functions involved: face_dumbbell is a method within the robot node that uses proportional angular control to orient the robot so that the handle of the dumbbell is exactly centered in front of the robot. Laser scan messages and twist messages are used to update the range data in this method and to update and control the positioning of the robot. 
 
 ### Picking up the dumbbell
