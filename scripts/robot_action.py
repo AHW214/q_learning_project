@@ -14,6 +14,7 @@ import rospy
 from rospy_util.controller import Cmd, Controller, Sub
 
 import controller.cmd as cmd
+from controller.sub import RobotAction
 import controller.sub as sub
 from data.image import ImageHSV, ImageROS
 import data.image as image
@@ -25,7 +26,13 @@ from util import compose
 Locator = Callable[[ImageHSV], Optional[Tuple[int, int]]]
 
 
-class Movement(Enum):
+@dataclass
+class ActionLocators:
+    locator_block: Locator
+    locator_dumbbell: Locator
+
+
+class State(Enum):
     stop = 1
     locate = 2
     face = 3
@@ -33,36 +40,33 @@ class Movement(Enum):
 
 
 @dataclass
-class AwaitImage:
-    pass
-
-
-@dataclass
-class HaveImage:
-    image: ImageHSV
-    movement: Movement
-
-
-State = Union[AwaitImage, HaveImage]
-
-
-@dataclass
 class Model:
-    cvBridge: CvBridge
-    locator: Locator
+    current_action: Optional[ActionLocators]
+    pending_actions: List[ActionLocators]
+    last_image: Optional[ImageHSV]
+    have_dumbbell: bool
     state: State
+    cvBridge: CvBridge
 
 
 init_model: Model = Model(
+    current_action=None,
+    pending_actions=[],
+    last_image=None,
+    have_dumbbell=False,
+    state=State.stop,
     cvBridge=CvBridge(),
-    locator=color.locate_green,
-    state=AwaitImage(),
 )
 
-init: Tuple[Model, List[Cmd[Any]]] = (init_model, [cmd.turn(0.2)])
+init: Tuple[Model, List[Cmd[Any]]] = (init_model, cmd.none)
 
 
 ### Messages ###
+
+
+@dataclass
+class Action:
+    action: RobotAction
 
 
 @dataclass
@@ -80,80 +84,139 @@ class Void:
     pass
 
 
-Msg = Union[Image, Obstacle, Void]
+Msg = Union[Action, Image, Obstacle, Void]
 
 
 ### Update ###
 
+KP_ANG = math.pi / 8.0
+KP_LIN = 0.5
+
 
 def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
-    if isinstance(msg, Image):
-        if isinstance(model.state, AwaitImage):
-            new_state = HaveImage(msg.image, Movement.locate)
-            return (replace(model, state=new_state), cmd.none)
+    if isinstance(msg, Action):
+        if (action := locators_from_action(msg.action)) is None:
+            print(f"invalid action: {msg.action}")
+            return (model, cmd.none)
 
-        new_state = replace(model.state, image=msg.image)
-        return (replace(model, state=new_state), cmd.none)
+        (new_action, new_pending, new_state) = (
+            (action, model.pending_actions, State.locate)
+            if model.current_action is None
+            else (
+                model.current_action,
+                [*model.pending_actions, action],
+                model.state,
+            )
+        )
+
+        new_model = replace(
+            model,
+            current_action=new_action,
+            pending_actions=new_pending,
+            state=new_state,
+        )
+
+        return (new_model, cmd.none)
+
+    if isinstance(msg, Image):
+        new_model = replace(model, last_image=msg.image)
+        return (new_model, cmd.none)
 
     if (
         isinstance(msg, Void)
-        or isinstance(model.state, AwaitImage)
-        or model.state.movement == Movement.stop
+        or model.last_image is None
+        or model.current_action is None
+        or model.state == State.stop
     ):
         return (model, cmd.none)
 
-    location = model.locator(model.state.image)
-    movement = model.state.movement
+    locator = (
+        model.current_action.locator_block
+        if model.have_dumbbell
+        else model.current_action.locator_dumbbell
+    )
 
-    if movement == Movement.locate:
-        if location is None:
-            return (model, [cmd.turn(0.2)])
+    location = locator(model.last_image)
 
-        return (new_movement(model, Movement.face), cmd.none)
+    if location is None:
+        return (
+            (model, [cmd.turn(0.2)])
+            if model.state == State.locate
+            else (replace(model, state=State.locate), cmd.none)
+        )
 
-    if movement == Movement.face:
-        if location is None:
-            return (new_movement(model, Movement.locate), [cmd.stop])
+    if model.state == State.locate:
+        return (replace(model, state=State.face), cmd.none)
 
-        (cx, _) = location
+    (cx, _) = location
+    err_ang = 1.0 - 2.0 * (cx / model.last_image.width)
 
-        err_ang = (model.state.image.width / 2) - cx
+    if model.state == State.face:
+        if abs(err_ang) < 0.05:
+            return (replace(model, state=State.approach), [cmd.stop])
 
-        if err_ang < 10:
-            return (new_movement(model, Movement.approach), [cmd.stop])
-
-        kp_ang = 1.0 / 500.0
-        vel_ang = kp_ang * err_ang
+        vel_ang = KP_ANG * err_ang
 
         return (model, [cmd.turn(vel_ang)])
 
-    if movement == Movement.approach:
-        if location is None:
-            return (new_movement(model, Movement.locate), [cmd.stop])
+    if model.state == State.approach:
+        if msg.distance < 0.3:
+            if not model.pending_actions:
+                return (
+                    replace(
+                        model,
+                        current_action=None,
+                        state=State.stop,
+                    ),
+                    [cmd.stop],
+                )
 
-        (cx, _) = location
-        err_ang = (model.state.image.width / 2) - cx
-        kp_ang = 1.0 / 500.0
+            (new_action, *new_pending) = model.pending_actions
+
+            return (
+                replace(
+                    model,
+                    current_action=new_action,
+                    pending_actions=new_pending,
+                    state=State.locate,
+                ),
+                cmd.none,
+            )
 
         err_lin = msg.distance - 0.3
 
-        if err_lin <= 0.0:
-            print("stop")
-            return (new_movement(model, Movement.stop), [cmd.stop])
-
-        kp_lin = 0.5
-
-        vel_ang = kp_ang * err_ang
-        vel_lin = kp_lin * err_lin
+        vel_ang = KP_ANG * err_ang
+        vel_lin = KP_LIN * err_lin
 
         return (model, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
 
     return (model, cmd.none)
 
 
-def new_movement(model: Model, movement: Movement) -> Model:
-    new_state = replace(model.state, movement=movement)
-    return replace(model, state=new_state)
+def locators_from_action(action: RobotAction) -> Optional[ActionLocators]:
+    if (loc_block := block_locator(action.block_id)) is None or (
+        loc_dumbbell := dumbbell_locator(action.robot_db)
+    ) is None:
+        return None
+
+    return ActionLocators(loc_block, loc_dumbbell)
+
+
+def block_locator(id: int) -> Optional[Locator]:
+    # TODO
+    return color.locate_green
+
+
+def dumbbell_locator(clr: str) -> Optional[Locator]:
+    return (
+        color.locate_red
+        if clr == "red"
+        else color.locate_green
+        if clr == "green"
+        else color.locate_blue
+        if clr == "blue"
+        else None
+    )
 
 
 ### Subscriptions ###
@@ -161,6 +224,7 @@ def new_movement(model: Model, movement: Movement) -> Model:
 
 def subscriptions(model: Model) -> List[Sub[Any, Msg]]:
     return [
+        sub.robot_action(Action),
         sub.image_sensor(toImageHSV(model.cvBridge)),
         sub.laser_scan(obstacle),
     ]
@@ -179,7 +243,7 @@ def obstacle(scan: LaserScan) -> Msg:
     return Obstacle(distance=closest)
 
 
-def toImageHSV(cvBridge: CvBridge) -> Callable[[ImageROS], Image]:
+def toImageHSV(cvBridge: CvBridge) -> Callable[[ImageROS], Msg]:
     return compose(Image, partial(image.from_ros_image, cvBridge))
 
 
