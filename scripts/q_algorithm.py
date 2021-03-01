@@ -68,7 +68,6 @@ class QLearn(object):
                     # moving between blocks is not allowed
                     self.actions[si][sf] = -1
                     continue
-                #print("Start: ", ri, gi, bi, "finish:", rf, gf, bf)
                 required_action = self.find_action(moved_dumbbell, destination)
                 self.actions[si][sf] = required_action
         print("Action Matrix Initialized")
@@ -80,14 +79,13 @@ class QLearn(object):
         gamma = 0.5
         s = 0
         while self.count<threshold:
-            print('---------\nIterations without update:', self.count, '/', threshold)
-            #print('state:', s)
+            print('------\nIterations without update:', self.count, '/', threshold)
             # selecting an action at random:
             all_actions = self.actions[s]
             possible_actions = all_actions[all_actions>=0]
             a = random.choice(possible_actions)
             color, block = self.inverse_action(a)
-            print("Move", self.dumbbell_color(color), "db to block", block)
+            print("Move", self.dumbbell_color(color), "to block", block)
             rospy.sleep(1.0)
             move = RobotMoveDBToBlock()
             move.robot_db = self.dumbbell_color(color)
@@ -101,34 +99,30 @@ class QLearn(object):
             print("Reward:", self.reward)
             update = self.q[s][a] + alpha*(self.reward + gamma*mx - self.q[s][a])
             if self.q[s][a] != update and update <= 100:
-                print('Updating the q-matrix.', s, a)
+                print('Updating the q-matrix')
                 self.q[s][a] = update
-                print(self.q)
                 self.publish_qmatrix()
                 self.count = 0
                 rospy.sleep(1.0)
             else:
-                #print('no update')
                 self.count += 1
             # need to check if the new state is at the end
             if self.end_state(new_state):
                 s = 0
             else:
                 s = new_state
-        print(self.q)
-        print('Q-Learning algorithm completed!')
-        print('The actions we want to take are: ')
+        print('\nQ-Learning algorithm completed!')
+        print('The actions that give the highest reward are: ')
         actions = np.arange(9)
         state = 0
         for x in range(0, 3):
             action = random.choice(actions[(self.q[state])>0])
             color, block = self.inverse_action(action)
-            print("Action", x+1,': Move',  self.dumbbell_color(color), "db to block", block)
+            print(x+1,') Move',  self.dumbbell_color(color), "to block", block)
             state = self.apply_action(state, action)
 
     def action_reward(self, data):
         """ Callback to receive the reward from robot movement """
-        print("Reward from callback:", data.reward)
         self.reward = data.reward
         rospy.sleep(1.0)
 
@@ -190,8 +184,6 @@ class QLearn(object):
             g = block
         elif color==2:
             b = block
-        else:
-            print("WHATT???")
         new_state = self.find_state(r, g, b)
         return new_state
 
