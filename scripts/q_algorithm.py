@@ -75,19 +75,19 @@ class QLearn(object):
 
     def fill_qmatrix(self):
         """ This contains the logic of the q-learning algorithm"""
-        threshold = 50
+        threshold = 75
         alpha = 1
         gamma = 0.5
         s = 0
         while self.count<threshold:
-            #print(self.count)
+            print('---------\nIterations without update:', self.count, '/', threshold)
             #print('state:', s)
             # selecting an action at random:
             all_actions = self.actions[s]
             possible_actions = all_actions[all_actions>=0]
             a = random.choice(possible_actions)
             color, block = self.inverse_action(a)
-            #print("Move", self.dumbbell_color(color), "to", block)
+            print("Move", self.dumbbell_color(color), "db to block", block)
             rospy.sleep(1.0)
             move = RobotMoveDBToBlock()
             move.robot_db = self.dumbbell_color(color)
@@ -98,14 +98,14 @@ class QLearn(object):
             new_state = self.apply_action(s, a)
             #once I am in new_state, what is the max there?
             mx = np.amax(self.q[new_state])
-            print("Reward seen in algorithm:", self.reward)
+            print("Reward:", self.reward)
             update = self.q[s][a] + alpha*(self.reward + gamma*mx - self.q[s][a])
-            if self.q[s][a] != update:
-                #print('updating')
+            if self.q[s][a] != update and update <= 100:
+                print('Updating the q-matrix.', s, a)
                 self.q[s][a] = update
+                print(self.q)
                 self.publish_qmatrix()
                 self.count = 0
-                print(self.q)
                 rospy.sleep(1.0)
             else:
                 #print('no update')
@@ -117,6 +117,14 @@ class QLearn(object):
                 s = new_state
         print(self.q)
         print('Q-Learning algorithm completed!')
+        print('The actions we want to take are: ')
+        actions = np.arange(9)
+        state = 0
+        for x in range(0, 3):
+            action = random.choice(actions[(self.q[state])>0])
+            color, block = self.inverse_action(action)
+            print("Action", x+1,': Move',  self.dumbbell_color(color), "db to block", block)
+            state = self.apply_action(state, action)
 
     def action_reward(self, data):
         """ Callback to receive the reward from robot movement """
