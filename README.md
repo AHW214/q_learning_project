@@ -1,5 +1,11 @@
 # q_learning_project
-Team: Elizabeth Singer, Adam Weider, and Katie Hughes
+## Team: Elizabeth Singer, Adam Weider, and Katie Hughes
+
+# Writeup
+## Objectives Description
+Our goal was to use a Q learning algorithm and reinforcement learning to teach the turtlebot to find the correct placement of dumbbells in front of corresponding numbered blocks. The next set of objectives was to use perception to identify the colored dumbbells and numbered blocks and robot manipulation to execute the strategy learned in the Q learning stage. We also used navigation to properly align the robot, pick up the blocks, and place them in the right places. Essentially, the robot used Q learning to learn how to find the right combination of dumbbells and blocks, perception to see which dumbbells and blocks it was looking at, navigation to get to the right blocks, and robot arm manipulation to pick up and put down the dumbbells in the place perceived by perception according to the strategy derived using q learning. 
+
+
 
 ### Gif - manipulator
 ![Example showing manipulator orienting toward dumbbell, picking it up, moving it, and putting it down.](Manipulate.gif)
