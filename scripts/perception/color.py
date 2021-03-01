@@ -42,8 +42,8 @@ def locate_color(
 
 
 locate_red = locate_color(
-    lower_bound=(0, 0, 0),
-    upper_bound=(0, 0, 0),
+    lower_bound=(128, 74, 64),
+    upper_bound=(255, 0, 42),
 )
 
 locate_green = locate_color(
@@ -52,8 +52,8 @@ locate_green = locate_color(
 )
 
 locate_blue = locate_color(
-    lower_bound=(0, 0, 0),
-    upper_bound=(0, 0, 0),
+    lower_bound=(64, 74, 128),
+    upper_bound=(42, 0, 255),
 )
 
 

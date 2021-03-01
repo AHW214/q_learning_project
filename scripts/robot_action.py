@@ -92,6 +92,8 @@ Msg = Union[Action, Image, Obstacle, Void]
 KP_ANG = math.pi / 8.0
 KP_LIN = 0.5
 
+STOP_DIST = 0.4
+
 
 def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     if isinstance(msg, Action):
@@ -160,30 +162,44 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
         return (model, [cmd.turn(vel_ang)])
 
     if model.state == State.approach:
-        if msg.distance < 0.3:
-            if not model.pending_actions:
+        if msg.distance < STOP_DIST:
+            if model.have_dumbbell:
+                # TODO - place dumbbell down
+
+                if not model.pending_actions:
+                    return (
+                        replace(
+                            model,
+                            current_action=None,
+                            state=State.stop,
+                        ),
+                        [cmd.stop],
+                    )
+
+                (new_action, *new_pending) = model.pending_actions
+
                 return (
                     replace(
                         model,
-                        current_action=None,
-                        state=State.stop,
+                        current_action=new_action,
+                        pending_actions=new_pending,
+                        state=State.locate,
                     ),
-                    [cmd.stop],
+                    cmd.none,
                 )
 
-            (new_action, *new_pending) = model.pending_actions
+            # TODO - pick dumbbell up
 
             return (
                 replace(
                     model,
-                    current_action=new_action,
-                    pending_actions=new_pending,
+                    have_dumbbell=True,
                     state=State.locate,
                 ),
                 cmd.none,
             )
 
-        err_lin = msg.distance - 0.3
+        err_lin = msg.distance - STOP_DIST
 
         vel_ang = KP_ANG * err_ang
         vel_lin = KP_LIN * err_lin
