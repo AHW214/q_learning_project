@@ -112,14 +112,17 @@ class QLearn(object):
             else:
                 s = new_state
         print('\nQ-Learning algorithm completed!')
-        print('The actions that give the highest reward are: ')
-        actions = np.arange(9)
-        state = 0
-        for x in range(0, 3):
-            action = random.choice(actions[(self.q[state])>0])
-            color, block = self.inverse_action(action)
-            print(x+1,') Move',  self.dumbbell_color(color), "to block", block)
-            state = self.apply_action(state, action)
+        try:
+            print('The actions that give the highest reward are: ')
+            actions = np.arange(9)
+            state = 0
+            for x in range(0, 3):
+                action = random.choice(actions[(self.q[state])>0])
+                color, block = self.inverse_action(action)
+                print(x+1,') Move',  self.dumbbell_color(color), "to block", block)
+                state = self.apply_action(state, action)
+        except:
+            print("Something went wrong. Try running again?")
 
     def action_reward(self, data):
         """ Callback to receive the reward from robot movement """
