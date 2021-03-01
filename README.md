@@ -5,10 +5,53 @@
 ## Objectives Description
 Our goal was to use a Q learning algorithm and reinforcement learning to teach the turtlebot to find the correct placement of dumbbells in front of corresponding numbered blocks. The next set of objectives was to use perception to identify the colored dumbbells and numbered blocks and robot manipulation to execute the strategy learned in the Q learning stage. We also used navigation to properly align the robot, pick up the blocks, and place them in the right places. Essentially, the robot used Q learning to learn how to find the right combination of dumbbells and blocks, perception to see which dumbbells and blocks it was looking at, navigation to get to the right blocks, and robot arm manipulation to pick up and put down the dumbbells in the place perceived by perception according to the strategy derived using q learning. 
 
+## High-level description
+(1 paragraph): At a high-level, describe how you used reinforcement learning to solve the task of determining which dumbbells belong in front of each numbered block.
 
+## Q-learning algorithm description
+Describe how you accomplished each of the following components of the Q-learning algorithm in 1-3 sentences, and also describe what functions / sections of the code executed each of these components(1-3 sentences per function / portion of code):
+### Selecting and executing actions for the robot (or phantom robot) to take
+### Updating the Q-matrix
+### Determining when to stop iterating through the Q-learning algorithm
+### Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
+
+## Robot perception description
+Describe how you accomplished each of the following components of the perception elements of this project in 1-3 sentences, any online sources of information/code that helped you to recognize the objects, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
+### Identifying the locations and identities of each of the colored dumbbells
+### Identifying the locations and identities of each of the numbered blocks
+
+## Robot manipulation and movement
+Describe how you accomplished each of the following components of the robot manipulation and movement elements of this project in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
 
 ### Gif - manipulator
 ![Example showing manipulator orienting toward dumbbell, picking it up, moving it, and putting it down.](Manipulate.gif)
+
+### Moving to the right spot in order to pick up a dumbbell
+The perception code uses color perception to identify the correct color dumbbell to approach using a combination of the camera and the laser scanner and proportional control. Once within half a meter of the appropriate colored dumbbell, the lift method in movearm.py uses the laser scanner to align the robot to point directly at the center of the dumbbell using proportional angular/rotational control and then uses proportional distance control to approach the dumbbell.
+
+### Picking up the dumbbell
+Once properly aligned and at a sufficient distance from the dumbbell, the manipulator arm is placed into a position where it can grab the center of the dumbbell. Using proportional control and forward motion the robot approaches until the gripper is properly around the handle of the dumbbell. Angular and distance control are used for this precise movement. The gripper is closed and the manipulator raises the dumbbell to a position where it can be carried without falling. 
+
+### Moving to the desired destination (numbered block) with the dumbbell
+### Putting the dumbbell back down at the desired destination
+Once oriented in front of the correct block a calculated sequence of motions are used to lower the dumbbell to the ground, open the manipulator arm, and then move back slowly to leave the dumbbell in an upright position in front of the appropriate block. 
+
+## Challenges
+(1 paragraph): Describe the challenges you faced and how you overcame them.
+
+## Future work
+(1 paragraph): If you had more time, how would you improve your implementation?
+
+## Takeaways
+(at least 2 bullet points with 2-3 sentences per bullet point): What are your key takeaways from this project that would help you/others in future robot programming assignments working in pairs? For each takeaway, provide a few sentences of elaboration.
+
+## gif
+In your writeup, include a gif of your robot successfully executing the task once your Q matrix has converged.
+
+## rosbag
+Record a run of your q-learning algorithm in a rosbag. Please record the following topics: /cmd_vel, /gazebo/set_model_state, /q_learning/q_matrix, /q_learning/reward, /q_learning/robot_action, /scan, and any other topics you generate and use in your particle filter project. Please do not record all of the topics, since the camera topics make the rosbags very large. For ease of use, here's how to record a rosbag:
+$ rosbag record -O filename.bag topic-names
+Please refer to the ROS Resources page for further details on how to record a rosbag.
 
 # Implementation plan
 
