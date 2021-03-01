@@ -9,11 +9,14 @@ Our goal was to use a Q learning algorithm and reinforcement learning to teach t
 (1 paragraph): At a high-level, describe how you used reinforcement learning to solve the task of determining which dumbbells belong in front of each numbered block.
 
 ## Q-learning algorithm description
-Describe how you accomplished each of the following components of the Q-learning algorithm in 1-3 sentences, and also describe what functions / sections of the code executed each of these components(1-3 sentences per function / portion of code):
 ### Selecting and executing actions for the robot (or phantom robot) to take
+We select actions for the phantom robot to take by using the action matrix, which tells which actions are legal given a specific state of the robot. Once we have a list of legal actions, we randomly choose one and publish the desired action. We include some rospy.sleep() calls in order to ensure that the reward is received before proceeding.
 ### Updating the Q-matrix
+We update the q-matrix via the algorithm described on the project page. Once a particular action has been performed and a reward has been received, we look at the potential rewards from the new position (by looking up another row in the q-matrix) and take the maximum value. We chose to use the parameters alpha = 1 and gamma = 0.5. We increment the value of the current index in the q-matrix by the quantity alpha * (reward + gamma * maximum_value - current_index). 
 ### Determining when to stop iterating through the Q-learning algorithm
-### Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
+We stop iterating through the q-learning algorithm after a certain threshold of iterations without an update. Through some trial and error we determined that the best threshold value is around 50. 
+### Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot 
+To determine the most optimal path after the q-matrix has converged, we locate the current state of the robot, and look up the possible actions that can be taken from that state (which is a row in the q-matrix). We find which index has the maximum value, which corresponds to which action has the maximum future reward. If there is more than one maximum we randomly choose one of them. Then, we perform that action. This process repeats until the robot ends up in its final state and receives the reward. 
 
 ## Robot perception description
 Describe how you accomplished each of the following components of the perception elements of this project in 1-3 sentences, any online sources of information/code that helped you to recognize the objects, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
@@ -165,20 +168,3 @@ entirely, colliding with the target, etc).
 
 ### Sunday, February 28th
 - Writeup, recording, rosbag, and partner survey
-
-
-# Writeup
-## Objectives Description
-## High Level Description
-## Q-Learning Algorithm Description
-We select actions for the phantom robot to take by using the action matrix, which tells which actions are legal given a specific state of the robot. Once we have a list of legal actions, we randomly choose one and publish the desired action. We include some rospy.sleep() calls in order to ensure that the reward is received before proceeding. 
-
-We update the q-matrix via the algorithm described on the project page. Once a particular action has been performed and a reward has been received, we look at the potential rewards from the new position (by looking up another row in the q-matrix) and take the maximum value. We chose to use the parameters alpha = 1 and gamma = 0.5. We increment the value of the current index in the q-matrix by the quantity alpha * (reward + gamma * maximum_value - current_index). 
-
-We stop iterating through the q-learning algorithm after a certain threshold of iterations without an update. Through some trial and error we determined that the best threshold value is around 50. 
-
-To determine the most optimal path after the q-matrix has converged, we locate the current state of the robot, and look up the possible actions that can be taken from that state (which is a row in the q-matrix). We find which index has the maximum value, which corresponds to which action has the maximum future reward. If there is more than one maximum we randomly choose one of them. Then, we perform that action. This process repeats until the robot ends up in its final state and receives the reward. 
-## Robot Perception Description
-## Robot Manipulation and Movement
-## Challenges
-## Future Work
