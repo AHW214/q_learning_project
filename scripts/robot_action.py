@@ -13,6 +13,8 @@ import rospy
 import rospy_util.mathf as mathf
 from rospy_util.controller import Cmd, Controller, Sub
 from rospy_util.turtle_pose import TurtlePose
+from rospy_util.vector2 import Vector2
+import rospy_util.vector2 as v2
 from sensor_msgs.msg import LaserScan
 
 # TODO - packages to clean up imports
@@ -39,6 +41,11 @@ class Block(IntEnum):
 class RobotAction:
     block: Block
     dumbbell: Range[HSV_CV2]
+
+
+@dataclass
+class FaceDumbbells:
+    pass
 
 
 @dataclass
@@ -73,6 +80,7 @@ class ApproachBlock:
 
 
 State = Union[
+    FaceDumbbells,
     FaceDumbbell,
     ApproachDumbbell,
     FaceBlocks,
@@ -92,7 +100,7 @@ class Model:
 
 
 init_model: Model = Model(
-    state=FaceDumbbell(),
+    state=FaceDumbbells(),
     actions=[],
     image=None,
     cv_bridge=CvBridge(),
@@ -135,11 +143,23 @@ Msg = Union[
 
 ### Update ###
 
-KP_ANG = math.pi / 8.0
-KP_LIN = 0.5
+KP_ANG_SPIN = math.pi / 6.0
+KP_ANG_FACE = math.pi / 8.0
 
-DIST_STOP = 0.4
+VEL_ANG_SPIN_MIN = math.pi / 10
+VEL_ANG_FACE_MIN = math.pi / 30
+
+KP_LIN_TO_DB = 2.0
+KP_LIN_TO_BLOCK = 0.5
+
+VEL_LIN_TO_DB_MAX = 0.8
+VEL_LIN_TO_BLOCK_MAX = 0.5
+
+DIST_STOP_DB = 0.4
+DIST_STOP_BLOCK = 0.3
 DIST_BLOCK_ALIGNMENT = 1.5
+
+POS_DBS = Vector2(x=1.0, y=0.0)
 DIR_BLOCKS = math.pi
 
 # https://emanual.robotis.com/docs/en/platform/turtlebot3/appendix_raspi_cam/
@@ -196,12 +216,23 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     print(model.state)
 
     if isinstance(msg, Odom):
+        if isinstance(model.state, FaceDumbbells):
+            dir_dbs = POS_DBS - msg.pose.position
+            dir_off = v2.signed_angle_between(v2.from_angle(msg.pose.yaw), dir_dbs)
+            print(dir_dbs)
+            print(msg.pose.yaw)
+            if approx_zero(err_ang := dir_off / math.pi):
+                return (replace(model, state=FaceDumbbell()), [cmd.stop])
+
+            vel_ang = set_under_abs(KP_ANG_SPIN * err_ang, VEL_ANG_SPIN_MIN)
+            return (model, [cmd.turn(vel_ang)])
+
         if isinstance(model.state, FaceBlocks):
-            if abs(err_ang := (DIR_BLOCKS - msg.pose.yaw) / math.pi) < 0.05:
+            if approx_zero(err_ang := (DIR_BLOCKS - msg.pose.yaw) / math.pi):
                 new_state = LocateBlock(remaining_alignments=1)
                 return (replace(model, state=new_state), [cmd.stop])
 
-            vel_ang = set_under_abs(0.5 * err_ang, 0.3)
+            vel_ang = set_under_abs(KP_ANG_SPIN * err_ang, VEL_ANG_SPIN_MIN)
             return (model, [cmd.turn(vel_ang)])
 
         if isinstance(model.state, LocateBlock) and model.image is not None:
@@ -222,12 +253,12 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
         if isinstance(model.state, FaceBlock):
             err_ang = model.state.direction - msg.pose.yaw
 
-            if abs(err_ang) < 0.05:
+            if approx_zero(err_ang):
                 new_state = ApproachBlock(model.state.remaining_alignments)
 
                 return (replace(model, state=new_state), [cmd.stop])
 
-            vel_ang = set_under_abs(0.5 * err_ang, 0.1)
+            vel_ang = set_under_abs(0.5 * err_ang, VEL_ANG_FACE_MIN)
 
             return (model, [cmd.turn(vel_ang)])
 
@@ -241,7 +272,7 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
                 new_state = LocateBlock(model.state.remaining_alignments - 1)
                 return (replace(model, state=new_state), [cmd.stop])
 
-            if msg.obstacle_dist < DIST_STOP:
+            if msg.obstacle_dist < DIST_STOP_BLOCK:
                 # TODO - place dumbbell
                 new_model = replace(
                     model,
@@ -251,22 +282,21 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
 
                 return (new_model, [cmd.stop])
 
-            err_lin = min(msg.obstacle_dist - 0.3, 1.0)
-            vel_lin = 0.4 * err_lin
+            err_lin = msg.obstacle_dist - DIST_STOP_BLOCK
+            vel_lin = min(KP_LIN_TO_BLOCK * err_lin, VEL_LIN_TO_BLOCK_MAX)
 
             return (model, [cmd.drive(vel_lin)])
 
         if isinstance(model.state, ApproachDumbbell) and model.image is not None:
-            if msg.obstacle_dist < DIST_STOP:
+            if msg.obstacle_dist < DIST_STOP_DB:
                 return (replace(model, state=FaceBlocks()), [cmd.stop])
 
             if (err_ang := dumbell_alignment_error(model.image)) is None:
                 return (model, [cmd.turn(0.2)])
 
-            # TODO - more constants
-            err_lin = min(msg.obstacle_dist - DIST_STOP, 1.0)
-            vel_lin = min(KP_LIN * err_lin, 0.1)
-            vel_ang = KP_ANG * err_ang
+            err_lin = msg.obstacle_dist - DIST_STOP_DB
+            vel_lin = min(KP_LIN_TO_DB * err_lin, VEL_LIN_TO_DB_MAX)
+            vel_ang = KP_ANG_FACE * err_ang
 
             return (model, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
 
@@ -277,12 +307,12 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
 
     if isinstance(new_model.state, FaceDumbbell):
         if (err_ang := dumbell_alignment_error(msg.image)) is None:
-            return (new_model, [cmd.turn(0.2)])
+            return (replace(new_model, state=FaceDumbbells()), [cmd.stop])
 
-        if abs(err_ang) < 0.05:
+        if approx_zero(err_ang):
             return (replace(new_model, state=ApproachDumbbell()), [cmd.stop])
 
-        vel_ang = KP_ANG * err_ang
+        vel_ang = KP_ANG_FACE * err_ang
         return (new_model, [cmd.turn(vel_ang)])
 
     return (new_model, cmd.none)
@@ -300,7 +330,11 @@ def error_from_center(
 
 
 def set_under_abs(value: float, low: float) -> float:
-    return mathf.sign(value) * max(abs(value), abs(low))
+    return mathf.sign(value) * min(abs(value), abs(low))
+
+
+def approx_zero(value: float, epsilon: float = 0.05) -> bool:
+    return abs(value) < epsilon
 
 
 def parse_action(action: RobotMoveDBToBlock) -> Optional[RobotAction]:
