@@ -13,6 +13,7 @@ import rospy
 import rospy_util.mathf as mathf
 from rospy_util.controller import Cmd, Controller, Sub
 from rospy_util.turtle_pose import TurtlePose
+from sensor_msgs.msg import LaserScan
 
 # TODO - packages to clean up imports
 import controller.cmd as cmd
@@ -23,7 +24,7 @@ from perception.color import HSV_CV2, Range
 import perception.color as color
 import perception.ocr as ocr
 from q_learning_project.msg import RobotMoveDBToBlock
-from util import compose
+from util import compose, head
 
 ### Model ###
 
@@ -41,11 +42,6 @@ class RobotAction:
 
 
 @dataclass
-class LocateDumbbell:
-    pass
-
-
-@dataclass
 class FaceDumbbell:
     pass
 
@@ -53,13 +49,6 @@ class FaceDumbbell:
 @dataclass
 class ApproachDumbbell:
     pass
-
-
-DumbbellState = Union[
-    LocateDumbbell,
-    FaceDumbbell,
-    ApproachDumbbell,
-]
 
 
 @dataclass
@@ -83,7 +72,9 @@ class ApproachBlock:
     num_adjust: int
 
 
-BlockState = Union[
+State = Union[
+    FaceDumbbell,
+    ApproachDumbbell,
     FaceBlocks,
     LocateBlock,
     FaceBlock,
@@ -92,42 +83,20 @@ BlockState = Union[
 
 
 @dataclass
-class Wait:
-    pass
-
-
-@dataclass
-class Retrieve:
-    action: RobotAction
-    state: DumbbellState
-
-
-@dataclass
-class Place:
-    action: RobotAction
-    state: BlockState
-
-
-State = Union[Wait, Retrieve, Place]
-
-
-@dataclass
 class Model:
-    pending_actions: List[RobotAction]
-    last_image: Optional[ImageBGR]
-    obstacle_dist: float
-    block_direction: Optional[float]  # TODO - refactor
     state: State
+    actions: List[RobotAction]
+
+    image: Optional[ImageBGR]
+
     cv_bridge: CvBridge
     keras_pipeline: ocr.Pipeline
 
 
 init_model: Model = Model(
-    pending_actions=[],
-    last_image=None,
-    obstacle_dist=math.inf,
-    block_direction=None,
-    state=Wait(),
+    state=LocateBlock(1),
+    actions=[],
+    image=None,
     cv_bridge=CvBridge(),
     keras_pipeline=ocr.Pipeline(scale=1.0),
 )
@@ -155,10 +124,15 @@ class Odom:
 
 @dataclass
 class Scan:
-    ranges: List[float]
+    obstacle_dist: float
 
 
-Msg = Union[Action, Image, Odom, Scan]
+Msg = Union[
+    Action,
+    Image,
+    Odom,
+    Scan,
+]
 
 
 ### Update ###
@@ -170,7 +144,8 @@ DIST_STOP = 0.4
 DIR_BLOCKS = math.pi
 
 # https://emanual.robotis.com/docs/en/platform/turtlebot3/appendix_raspi_cam/
-FOV_HORIZ = math.radians(62.2)
+FOV_IMAGE = math.radians(62.2)
+FOV_LIDAR = 60
 
 RED: Range[HSV_CV2] = color.hsv_range(
     lower=(0, 90, 60),
@@ -195,161 +170,139 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
             print(f"invalid action: {msg.action}")
             return (model, cmd.none)
 
-        (new_pending, new_state) = (
-            ([], Retrieve(action, LocateDumbbell()))
-            if isinstance(model.state, Wait)
-            else ([*model.pending_actions, action], model.state)
-        )
+        actions = [*model.actions, action]
 
-        new_model = replace(model, pending_actions=new_pending, state=new_state)
+        return (replace(model, actions=actions), cmd.none)
 
-        return (new_model, cmd.none)
-
-    if isinstance(msg, Image):
-        new_model = replace(model, last_image=msg.image)
-        return (new_model, cmd.none)
-
-    if isinstance(msg, Scan):
-        front = msg.ranges[:60] + msg.ranges[300:]
-        ranges_sanitized = [r for r in front if math.isfinite(r) and r > 0.2]
-        closest = math.inf if not ranges_sanitized else min(ranges_sanitized)
-
-        new_model = replace(model, obstacle_dist=closest)
-        return (new_model, cmd.none)
-
-    if isinstance(model.state, Wait) or model.last_image is None:
+    if (action := head(model.actions)) is None:
         return (model, cmd.none)
+
+    dumbell_alignment_error: Callable[[ImageBGR], Optional[float]] = partial(
+        error_from_center,
+        partial(
+            color.locate_color,
+            action.dumbbell,
+        ),
+    )
+
+    block_alignment_error: Callable[[ImageBGR], Optional[float]] = partial(
+        error_from_center,
+        partial(
+            ocr.locate_number,
+            model.keras_pipeline,
+            action.block.value,
+        ),
+    )
 
     print(model.state)
 
-    if isinstance(model.state, Retrieve):
-        print("retrieve")
-        (new_state, cmds) = retrieve_dumbbell(
-            state=model.state,
-            img=model.last_image,
-            dist=model.obstacle_dist,
-        )
+    if isinstance(msg, Odom):
+        if isinstance(model.state, FaceBlocks):
+            if abs(err_ang := (DIR_BLOCKS - msg.pose.yaw) / math.pi) < 0.05:
+                return (replace(model, state=LocateBlock(num_adjust=1)), [cmd.stop])
 
-        return (replace(model, state=new_state), cmds)
+            # TODO - add helper
+            vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.3)
+            return (model, [cmd.turn(vel_ang)])
 
-    print("place")
+        if isinstance(model.state, LocateBlock) and model.image is not None:
+            if (err_ang := block_alignment_error(model.image)) is None:
+                # TODO - rotate more
+                return (model, cmd.none)
 
-    (new_state, cmds) = place_dumbbell(
-        state=model.state,
-        img=model.last_image,
-        dist=model.obstacle_dist,
-        yaw=msg.pose.yaw,
-        pline=model.keras_pipeline,
-    )
+            yaw_off = FOV_IMAGE * err_ang
+            dir_block = msg.pose.yaw + yaw_off
 
-    return (
-        replace(
-            model,
-            state=new_state,
-        ),
-        cmds,
-    )
-
-
-# TODO - call on image/scan message (not odom)
-def retrieve_dumbbell(
-    state: Retrieve,
-    img: ImageBGR,
-    dist: float,
-) -> Tuple[State, List[Cmd[Any]]]:
-    if (img_pos := color.locate_color(state.action.dumbbell, img)) is None:
-        return (replace(state, state=LocateDumbbell()), [cmd.turn(0.2)])
-
-    if isinstance(state.state, LocateDumbbell):
-        return (replace(state, state=FaceDumbbell()), [cmd.stop])
-
-    (cx, _) = img_pos
-    err_ang = 1.0 - 2.0 * (cx / img.width)
-
-    if isinstance(state.state, FaceDumbbell):
-        if abs(err_ang) < 0.05:
-            return (replace(state, state=ApproachDumbbell()), [cmd.stop])
-
-        vel_ang = KP_ANG * err_ang
-        return (state, [cmd.turn(vel_ang)])
-
-    if dist < DIST_STOP:
-        return (Place(state.action, FaceBlocks()), [cmd.stop])
-
-    err_lin = min(dist - DIST_STOP, 1.0)
-    vel_lin = min(KP_LIN * err_lin, 0.1)
-    vel_ang = KP_ANG * err_ang
-
-    return (state, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
-
-
-def place_dumbbell(
-    state: Place,
-    img: ImageBGR,
-    dist: float,
-    yaw: float,
-    pline: ocr.Pipeline,
-) -> Tuple[State, List[Cmd[Any]]]:
-    if isinstance(state.state, FaceBlocks):
-        if abs(err_ang := (DIR_BLOCKS - yaw) / math.pi) < 0.05:
-            return (replace(state, state=LocateBlock(num_adjust=1)), [cmd.stop])
-
-        vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.3)
-        return (state, [cmd.turn(vel_ang)])
-
-    if isinstance(state.state, LocateBlock):
-        if (img_pos := ocr.locate_number(pline, state.action.block.value, img)) is None:
-            print("rip")
-            return (state, cmd.none)
-
-        print(img_pos)
-
-        (cx, _) = img_pos
-        err_ang = 0.5 - (cx / img.width)
-        yaw_off = FOV_HORIZ * err_ang
-        dir_block = yaw + yaw_off
-
-        print(dir_block)
-
-        return (
-            replace(
-                state,
-                state=FaceBlock(
-                    direction=dir_block,
-                    num_adjust=state.state.num_adjust,
-                ),
-            ),
-            cmd.none,
-        )
-
-    if isinstance(state.state, FaceBlock):
-        err_ang = state.state.direction - yaw
-
-        if abs(err_ang) < 0.05:
             return (
-                replace(state, state=ApproachBlock(state.state.num_adjust)),
-                [cmd.stop],
+                replace(
+                    model,
+                    state=FaceBlock(
+                        direction=dir_block,
+                        # TODO - names
+                        num_adjust=model.state.num_adjust,
+                    ),
+                ),
+                cmd.none,
             )
 
-        vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.1)
+        if isinstance(model.state, FaceBlock):
+            err_ang = model.state.direction - msg.pose.yaw
 
-        return (state, [cmd.turn(vel_ang)])
+            if abs(err_ang) < 0.05:
+                return (
+                    # TODO - names
+                    replace(model, state=ApproachBlock(model.state.num_adjust)),
+                    [cmd.stop],
+                )
 
-    if dist < 1.5 * state.state.num_adjust:
-        return (
-            replace(state, state=LocateBlock(num_adjust=state.state.num_adjust - 1)),
-            [cmd.stop],
-        )
+            # TODO - add helper
+            vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.1)
 
-    if dist < DIST_STOP:
-        # TODO place dumbbell
+            return (model, [cmd.turn(vel_ang)])
 
-        return (state, [cmd.stop])
+        return (model, cmd.none)
 
-    err_lin = min(dist - 0.3, 1.0)
-    vel_lin = 0.4 * err_lin
+    if isinstance(msg, Scan):
+        if isinstance(model.state, ApproachBlock):
+            if msg.obstacle_dist < 1.5 * model.state.num_adjust:
+                return (
+                    # TODO - names
+                    replace(
+                        model, state=LocateBlock(num_adjust=model.state.num_adjust - 1)
+                    ),
+                    [cmd.stop],
+                )
 
-    return (state, [cmd.drive(vel_lin)])
+            if msg.obstacle_dist < DIST_STOP:
+                # TODO - place dumbbell
+                return (replace(model, actions=model.actions[1:]), [cmd.stop])
+
+            # TODO - add helper
+            err_lin = min(msg.obstacle_dist - 0.3, 1.0)
+            vel_lin = 0.4 * err_lin
+
+            return (model, [cmd.drive(vel_lin)])
+
+        if isinstance(model.state, ApproachDumbbell) and model.image is not None:
+            if msg.obstacle_dist < DIST_STOP:
+                return (replace(model, state=FaceBlocks()), [cmd.stop])
+
+            if (err_ang := dumbell_alignment_error(model.image)) is None:
+                return (model, [cmd.turn(0.2)])
+
+            err_lin = min(msg.obstacle_dist - DIST_STOP, 1.0)
+            vel_lin = min(KP_LIN * err_lin, 0.1)
+            vel_ang = KP_ANG * err_ang
+
+            return (model, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
+
+        return (model, cmd.none)
+
+    # if isinstance(msg, Image):
+    new_model = replace(model, image=msg.image)
+
+    if isinstance(new_model.state, FaceDumbbell):
+        if (err_ang := dumbell_alignment_error(msg.image)) is None:
+            return (new_model, [cmd.turn(0.2)])
+
+        if abs(err_ang) < 0.05:
+            return (replace(new_model, state=ApproachDumbbell()), [cmd.stop])
+
+        vel_ang = KP_ANG * err_ang
+        return (new_model, [cmd.turn(vel_ang)])
+
+    return (new_model, cmd.none)
+
+
+def error_from_center(
+    with_image: Callable[[ImageBGR], Optional[Tuple[int, int]]],
+    img: ImageBGR,
+) -> Optional[float]:
+    if (img_pos := with_image(img)) is None:
+        return None
+
+    (cx, _) = img_pos
+    return 0.5 - (cx / img.width)
 
 
 def parse_action(action: RobotMoveDBToBlock) -> Optional[RobotAction]:
@@ -385,17 +338,17 @@ def subscriptions(model: Model) -> List[Sub[Any, Msg]]:
         sub.robot_action(Action),
         sub.image_sensor(toImageCV2(model.cv_bridge)),
         sub.odometry(Odom),
-        sub.laser_scan(lambda s: Scan(s.ranges)),
+        sub.laser_scan(partial(obstacle, FOV_LIDAR)),
     ]
 
 
-# def obstacle(scan: LaserScan) -> Msg:
-#     ranges: List[float] = [r for r in scan.ranges if math.isfinite(r) and r > 0.2]
+def obstacle(fov: int, scan: LaserScan) -> Msg:
+    front = scan.ranges[: fov // 2] + scan.ranges[360 - (fov // 2) :]
+    # TODO - is the latter check necessary
+    ranges_sanitized = [r for r in front if math.isfinite(r) and r > 0.2]
+    dist = math.inf if not ranges_sanitized else min(ranges_sanitized)
 
-#     if not ranges:
-#         return Void()
-
-#     return Obstacle(distance=min(ranges))
+    return Scan(dist)
 
 
 def toImageCV2(cvBridge: CvBridge) -> Callable[[ImageROS], Msg]:
