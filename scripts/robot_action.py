@@ -40,17 +40,71 @@ class RobotAction:
     dumbbell: Range[HSV_CV2]
 
 
-class Retrieve(IntEnum):
-    locate = 1
-    face = 2
-    approach = 3
+@dataclass
+class Wait:
+    pass
 
 
-class Place(IntEnum):
-    orient = 1
-    locate = 2
-    face = 3
-    approach = 4
+@dataclass
+class LocateDumbbell:
+    pass
+
+
+@dataclass
+class FaceDumbbell:
+    pass
+
+
+@dataclass
+class ApproachDumbbell:
+    pass
+
+
+DumbbellState = Union[
+    Wait,
+    LocateDumbbell,
+    FaceDumbbell,
+    ApproachDumbbell,
+]
+
+
+@dataclass
+class FaceBlocks:
+    pass
+
+
+@dataclass
+class LocateBlock:
+    num_adjust: int
+
+
+@dataclass
+class FaceBlock:
+    direction: float
+    num_adjust: int
+
+
+@dataclass
+class ApproachBlock:
+    num_adjust: int
+
+
+BlockState = Union[
+    FaceBlocks,
+    LocateBlock,
+    FaceBlock,
+    ApproachBlock,
+]
+
+
+@dataclass
+class Retrieve:
+    state: DumbbellState
+
+
+@dataclass
+class Place:
+    state: BlockState
 
 
 State = Union[Retrieve, Place]
@@ -74,7 +128,7 @@ init_model: Model = Model(
     last_image=None,
     obstacle_dist=math.inf,
     block_direction=None,
-    state=Retrieve.locate,
+    state=Retrieve(LocateDumbbell()),
     cv_bridge=CvBridge(),
     keras_pipeline=ocr.Pipeline(scale=1.0),
 )
@@ -143,7 +197,7 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
             return (model, cmd.none)
 
         (new_action, new_pending, new_state) = (
-            (action, model.pending_actions, Retrieve.locate)
+            (action, model.pending_actions, Retrieve(LocateDumbbell()))
             if model.current_action is None
             else (
                 model.current_action,
@@ -181,7 +235,7 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     if isinstance(model.state, Retrieve):
         print("retrieve")
         (new_state, cmds) = retrieve_dumbbell(
-            state=model.state,
+            state=model.state.state,
             img=model.last_image,
             dist=model.obstacle_dist,
             clr=model.current_action.dumbbell,
@@ -191,13 +245,12 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
 
     print("place")
 
-    (new_state, dir_block, cmds) = place_dumbbell(
-        state=model.state,
+    (new_state, cmds) = place_dumbbell(
+        state=model.state.state,
         img=model.last_image,
         dist=model.obstacle_dist,
         yaw=msg.pose.yaw,
         block=model.current_action.block,
-        dir_block=model.block_direction,
         pline=model.keras_pipeline,
     )
 
@@ -205,7 +258,6 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
         replace(
             model,
             state=new_state,
-            block_direction=dir_block,
         ),
         cmds,
     )
@@ -213,59 +265,56 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
 
 # TODO - call on image/scan message (not odom)
 def retrieve_dumbbell(
-    state: Retrieve,
+    state: DumbbellState,
     img: ImageBGR,
     dist: float,
     clr: Range[HSV_CV2],
 ) -> Tuple[State, List[Cmd[Any]]]:
     if (img_pos := color.locate_color(clr, img)) is None:
-        return (Retrieve.locate, [cmd.turn(0.2)])
+        return (Retrieve(LocateDumbbell()), [cmd.turn(0.2)])
 
-    if state == Retrieve.locate:
-        return (Retrieve.face, [cmd.stop])
+    if isinstance(state, LocateDumbbell):
+        return (Retrieve(FaceDumbbell()), [cmd.stop])
 
     (cx, _) = img_pos
     err_ang = 1.0 - 2.0 * (cx / img.width)
 
-    if state == Retrieve.face:
+    if isinstance(state, FaceDumbbell):
         if abs(err_ang) < 0.05:
-            return (Retrieve.approach, [cmd.stop])
+            return (Retrieve(ApproachDumbbell()), [cmd.stop])
 
         vel_ang = KP_ANG * err_ang
-        return (state, [cmd.turn(vel_ang)])
+        return (Retrieve(state), [cmd.turn(vel_ang)])
 
-    # if state == Retrieve.approach:
     if dist < DIST_STOP:
-        return (Place.orient, [cmd.stop])
+        return (Place(FaceBlocks()), [cmd.stop])
 
     err_lin = min(dist - DIST_STOP, 1.0)
     vel_lin = min(KP_LIN * err_lin, 0.1)
     vel_ang = KP_ANG * err_ang
 
-    return (state, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
+    return (Retrieve(state), [cmd.velocity(linear=vel_lin, angular=vel_ang)])
 
 
 def place_dumbbell(
-    state: Place,
+    state: BlockState,
     img: ImageBGR,
     dist: float,
     yaw: float,
     block: Block,
-    dir_block: Optional[float],
     pline: ocr.Pipeline,
-) -> Tuple[State, Optional[float], List[Cmd[Any]]]:
-    print("hi")
-    if state == Place.orient:
+) -> Tuple[State, List[Cmd[Any]]]:
+    if isinstance(state, FaceBlocks):
         if abs(err_ang := (DIR_BLOCKS - yaw) / math.pi) < 0.05:
-            return (Place.locate, dir_block, [cmd.stop])
+            return (Place(LocateBlock(num_adjust=1)), [cmd.stop])
 
         vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.3)
-        return (state, dir_block, [cmd.turn(vel_ang)])
+        return (Place(state), [cmd.turn(vel_ang)])
 
-    if state == Place.locate:
+    if isinstance(state, LocateBlock):
         if (img_pos := ocr.locate_number(pline, block.value, img)) is None:
             print("rip")
-            return (Place.locate, dir_block, cmd.none)
+            return (Place(state), cmd.none)
 
         print(img_pos)
 
@@ -276,34 +325,36 @@ def place_dumbbell(
 
         print(dir_block)
 
-        return (Place.face, dir_block, cmd.none)
+        return (
+            Place(
+                FaceBlock(
+                    direction=dir_block,
+                    num_adjust=state.num_adjust,
+                )
+            ),
+            cmd.none,
+        )
 
-    if state == Place.face:
-        # TODO - eliminate
-        if dir_block is None:
-            print("rip rip")
-            return (Place.locate, dir_block, cmd.none)
-
-        err_ang = dir_block - yaw
+    if isinstance(state, FaceBlock):
+        err_ang = state.direction - yaw
 
         if abs(err_ang) < 0.05:
-            return (Place.approach, dir_block, [cmd.stop])
+            return (Place(ApproachBlock(state.num_adjust)), [cmd.stop])
 
         vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.1)
 
-        return (state, dir_block, [cmd.turn(vel_ang)])
+        return (Place(state), [cmd.turn(vel_ang)])
 
-    # if state == Place.approach:
-    if dist < 1.5:
-        return (Place.face, None, [cmd.stop])
+    if dist < 1.5 * state.num_adjust:
+        return (Place(LocateBlock(num_adjust=state.num_adjust - 1)), [cmd.stop])
 
     if dist < DIST_STOP:
-        return (state, dir_block, [cmd.stop])
+        return (Place(state), [cmd.stop])
 
     err_lin = min(dist - 0.3, 1.0)
     vel_lin = 0.4 * err_lin
 
-    return (state, dir_block, [cmd.drive(vel_lin)])
+    return (Place(state), [cmd.drive(vel_lin)])
 
 
 def parse_action(action: RobotMoveDBToBlock) -> Optional[RobotAction]:

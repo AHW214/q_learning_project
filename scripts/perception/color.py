@@ -30,8 +30,8 @@ def locate_color(range: Range[HSV_CV2], img: ImageBGR) -> Optional[Tuple[int, in
         upperb=array(range.upper),
     )
 
-    cv2.imshow("window", masked)
-    cv2.waitKey(3)
+    # cv2.imshow("window", masked)
+    # cv2.waitKey(3)
 
     moments: Dict[str, int] = cv2.moments(masked)
 
