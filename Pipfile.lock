@@ -792,7 +792,7 @@
         "rospy-util": {
             "editable": true,
             "git": "https://github.com/AHW214/rospy-util.git",
-            "ref": "deeb42c9b1a94afdeabfb0ef69feebf8f9edb556"
+            "ref": "5824d1c5246c27f06316eeab965c1ea61d85328d"
         },
         "rsa": {
             "hashes": [
@@ -939,6 +939,13 @@
                 "sha256:1d6d69ce66211143803fbc56652b41d73b4a400a2891d7bf7a1cdf4c02de613b"
             ],
             "version": "==1.1.0"
+        },
+        "tf": {
+            "hashes": [
+                "sha256:2bf7621845f7b0c3825dae04f8efc601ace4a3d8c5f89ad22f786cd7895e82db",
+                "sha256:998da79831d6e278eb2791626f9e45ee2ba6f0b7d7e8f2b06e1c351574d6cf30"
+            ],
+            "version": "==1.12.1.post1"
         },
         "tifffile": {
             "hashes": [

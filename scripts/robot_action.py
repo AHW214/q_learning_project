@@ -9,9 +9,9 @@ import math
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 from cv_bridge import CvBridge
-from sensor_msgs.msg import LaserScan
 import rospy
 from rospy_util.controller import Cmd, Controller, Sub
+from rospy_util.turtle_pose import TurtlePose
 
 # TODO - packages to clean up imports
 import controller.cmd as cmd
@@ -52,6 +52,7 @@ class Model:
     pending_actions: List[RobotAction]
     have_dumbbell: bool
     last_image: Optional[ImageBGR]
+    obstacle_dist: float
     state: State
     cv_bridge: CvBridge
     keras_pipeline: ocr.Pipeline
@@ -62,6 +63,7 @@ init_model: Model = Model(
     pending_actions=[],
     have_dumbbell=False,
     last_image=None,
+    obstacle_dist=math.inf,
     state=State.stop,
     cv_bridge=CvBridge(),
     keras_pipeline=ocr.Pipeline(scale=1.0),
@@ -84,16 +86,16 @@ class Image:
 
 
 @dataclass
-class Obstacle:
-    distance: float
+class Odom:
+    pose: TurtlePose
 
 
 @dataclass
-class Void:
-    pass
+class Scan:
+    ranges: List[float]
 
 
-Msg = Union[Action, Image, Obstacle, Void]
+Msg = Union[Action, Image, Odom, Scan]
 
 
 ### Update ###
@@ -150,96 +152,63 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
         new_model = replace(model, last_image=msg.image)
         return (new_model, cmd.none)
 
+    if isinstance(msg, Scan):
+        ranges_sanitized = [r for r in msg.ranges if math.isfinite(r) and r > 0.2]
+        closest = math.inf if not ranges_sanitized else min(ranges_sanitized)
+
+        new_model = replace(model, obstacle_dist=closest)
+        return (new_model, cmd.none)
+
     if (
-        isinstance(msg, Void)
-        or model.last_image is None
+        model.last_image is None
         or model.current_action is None
         or model.state == State.stop
     ):
         return (model, cmd.none)
 
-    locator = (
-        partial(
-            ocr.locate_number,
-            model.keras_pipeline,
-            model.current_action.block.value,
-        )
-        if model.have_dumbbell
-        else partial(
-            color.locate_color,
-            model.current_action.dumbbell,
-        )
+    (new_state, cmds) = retrieve_dumbbell(
+        model.state,
+        model.last_image,
+        model.obstacle_dist,
+        model.current_action.dumbbell,
     )
 
-    location = locator(model.last_image)
+    return (replace(model, state=new_state), cmds)
 
-    if location is None:
-        return (
-            (model, [cmd.turn(0.2)])
-            if model.state == State.locate
-            else (replace(model, state=State.locate), cmd.none)
-        )
 
-    if model.state == State.locate:
-        return (replace(model, state=State.face), cmd.none)
+def retrieve_dumbbell(
+    state: State,
+    img: ImageBGR,
+    dist: float,
+    clr: Range[HSV_CV2],
+) -> Tuple[State, List[Cmd[Any]]]:
+    if (img_pos := color.locate_color(clr, img)) is None:
+        return (State.locate, [cmd.turn(0.2)])
 
-    (cx, _) = location
-    err_ang = 1.0 - 2.0 * (cx / model.last_image.width)
+    if state == State.locate:
+        return (State.face, [cmd.stop])
 
-    if model.state == State.face:
+    (cx, _) = img_pos
+    err_ang = 1.0 - 2.0 * (cx / img.width)
+
+    if state == State.face:
         if abs(err_ang) < 0.05:
-            return (replace(model, state=State.approach), [cmd.stop])
+            return (State.approach, [cmd.stop])
 
         vel_ang = KP_ANG * err_ang
+        return (state, [cmd.turn(vel_ang)])
 
-        return (model, [cmd.turn(vel_ang)])
+    if state == State.approach:
+        if dist < DIST_STOP:
+            return (State.stop, [cmd.stop])
 
-    if model.state == State.approach:
-        if msg.distance < DIST_STOP:
-            if model.have_dumbbell:
-                # TODO - place dumbbell down
-
-                if not model.pending_actions:
-                    return (
-                        replace(
-                            model,
-                            current_action=None,
-                            state=State.stop,
-                        ),
-                        [cmd.stop],
-                    )
-
-                (new_action, *new_pending) = model.pending_actions
-
-                return (
-                    replace(
-                        model,
-                        current_action=new_action,
-                        pending_actions=new_pending,
-                        state=State.locate,
-                    ),
-                    cmd.none,
-                )
-
-            # TODO - pick dumbbell up
-
-            return (
-                replace(
-                    model,
-                    have_dumbbell=True,
-                    state=State.locate,
-                ),
-                cmd.none,
-            )
-
-        err_lin = msg.distance - DIST_STOP
-
-        vel_ang = KP_ANG * err_ang
+        err_lin = min(dist - DIST_STOP, 1.0)
         vel_lin = KP_LIN * err_lin
+        vel_ang = KP_ANG * err_ang
 
-        return (model, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
+        return (state, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
 
-    return (model, cmd.none)
+    return (state, cmd.none)
 
 
 def parse_action(action: RobotMoveDBToBlock) -> Optional[RobotAction]:
@@ -274,17 +243,18 @@ def subscriptions(model: Model) -> List[Sub[Any, Msg]]:
     return [
         sub.robot_action(Action),
         sub.image_sensor(toImageCV2(model.cv_bridge)),
-        sub.laser_scan(obstacle),
+        sub.odometry(Odom),
+        sub.laser_scan(lambda s: Scan(s.ranges)),
     ]
 
 
-def obstacle(scan: LaserScan) -> Msg:
-    ranges: List[float] = [r for r in scan.ranges if math.isfinite(r) and r > 0.2]
+# def obstacle(scan: LaserScan) -> Msg:
+#     ranges: List[float] = [r for r in scan.ranges if math.isfinite(r) and r > 0.2]
 
-    if not ranges:
-        return Void()
+#     if not ranges:
+#         return Void()
 
-    return Obstacle(distance=min(ranges))
+#     return Obstacle(distance=min(ranges))
 
 
 def toImageCV2(cvBridge: CvBridge) -> Callable[[ImageROS], Msg]:
