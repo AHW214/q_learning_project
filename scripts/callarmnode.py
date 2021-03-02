@@ -27,13 +27,18 @@ class CallArm(object):
         rospy.init_node('CallArm')
 
         self.arm_pub = rospy.Publisher("/q_learning/cmd_arm", RobotMoveDBToBlock, queue_size=10)
-        rospy.Subscriber("q_learning/res_arm", RobotMoveDBToBlock, self.command_received)
+        rospy.Subscriber("/q_learning/res_arm", RobotMoveDBToBlock, self.command_received)
         
     def command_received(self,data):
+        print("command received")
         self.response = data.robot_db
 
     def run(self):
         rate = rospy.Rate(1)
+        connections = self.arm_pub.get_num_connections()
+        while connections < 1:
+            rate.sleep()
+            connections = self.arm_pub.get_num_connections()
         self.response = ""
         arm_command = RobotMoveDBToBlock()
         arm_command.robot_db = "up"

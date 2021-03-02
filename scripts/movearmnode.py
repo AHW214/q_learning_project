@@ -194,6 +194,12 @@ class Robot(object):
         self.resp_pub.publish(response_data)
             
     def run(self):
+        rate = rospy.Rate(1)
+        connections = self.resp_pub.get_num_connections()
+        while connections < 1:
+            rate.sleep()
+            connections = self.resp_pub.get_num_connections()
+
         rospy.spin()
 
 if __name__=="__main__":
