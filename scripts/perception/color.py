@@ -24,8 +24,6 @@ class Range(Generic[T]):
 def locate_color(range: Range[HSV_CV2], img: ImageBGR) -> Optional[Tuple[int, int]]:
     hsv = image.to_hsv(img)
 
-    print(range)
-
     masked = cv2.inRange(
         src=hsv.data,
         lowerb=array(range.lower),
@@ -51,8 +49,7 @@ def locate_color(range: Range[HSV_CV2], img: ImageBGR) -> Optional[Tuple[int, in
 
 
 def hsv_range(
-    lower: Tuple[float, float, float],
-    upper: Tuple[float, float, float]
+    lower: Tuple[float, float, float], upper: Tuple[float, float, float]
 ) -> Range[HSV_CV2]:
     return Range(
         lower=hsv_cv2(*lower),

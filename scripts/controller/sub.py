@@ -2,9 +2,14 @@
 
 from typing import Callable, TypeVar
 
-from q_learning_project.msg import RobotMoveDBToBlock
+from nav_msgs.msg import Odometry
 from rospy_util.controller import Sub
-from sensor_msgs.msg import LaserScan, Image
+from rospy_util.turtle_pose import TurtlePose
+import rospy_util.turtle_pose as tp
+from sensor_msgs.msg import Image, LaserScan
+
+from q_learning_project.msg import RobotMoveDBToBlock
+
 
 Msg = TypeVar("Msg")
 
@@ -16,6 +21,14 @@ def robot_action(
         topic_name="/q_learning/robot_action",
         message_type=RobotMoveDBToBlock,
         to_msg=to_msg,
+    )
+
+
+def odometry(to_msg: Callable[[TurtlePose], Msg]) -> Sub[Odometry, Msg]:
+    return Sub(
+        topic_name="/odom",
+        message_type=Odometry,
+        to_msg=lambda odom: to_msg(tp.from_pose(odom.pose.pose)),
     )
 
 
