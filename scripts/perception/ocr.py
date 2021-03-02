@@ -21,12 +21,8 @@ def locate_number(
 ) -> Optional[Tuple[int, int]]:
     box = locate_front_facing_text(pipeline, str(num), img)
 
-    print("no box")
-
     if box is None:
         return None
-
-    print("box")
 
     ((x1, y1), _, (x2, y2), _) = box
     rec = cv2.rectangle(
