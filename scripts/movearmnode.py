@@ -17,7 +17,7 @@ import math
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Vector3
-from q_learning_project.msg import ArmCommand ArmResponse
+from q_learning_project.msg import RobotMoveDBToBlock
 
 class Robot(object):
 
@@ -37,11 +37,11 @@ class Robot(object):
         #Declare node as a subscriber to the scan topic and
         # set self.process_scan as the function to be used for callback
         rospy.Subscriber("/scan", LaserScan, self.process_scan)
-        rospy.Subscriber("/q_learning/cmd_arm", ArmCommand, self.command_received)
+        rospy.Subscriber("/q_learning/cmd_arm", RobotMoveDBToBlock, self.command_received)
         
         #Get a publisher to the cmd_vel topic
         self.twist_pub = rospy.Publisher ("/cmd_vel", Twist, queue_size = 10)
-        self.resp_pub = rospy.Publisher("/q_learning/res_arm", ArmResponse, queue_size=10)
+        self.resp_pub = rospy.Publisher("/q_learning/res_arm", RobotMoveDBToBlock, queue_size=10)
         
         #Create a default twist msg (all values 0)
         lin = Vector3()
@@ -177,23 +177,20 @@ class Robot(object):
         self.open_gripper()
 
     def command_received(self,data):
-        self.command = data.command
-        self.iter = data.iteration
-        response_data = ArmResponse()
+        print("command received")
+        self.command = data.robot_db
+        response_data = RobotMoveDBToBlock()
         if self.command == "up":
             print("Move:picking up")
             self.pickup_db()
-            response_data.response = "done"
-            response_data.iteration = self.iter
+            response_data.robot_db = "done"
         elif self.command == "down":
             print("Move:putting down")
             self.putdown_db()
-            response_data.response = "done"
-            response_data.iteration = self.iter
+            response_data.robot_db = "done"
         else:
             print("Error: command_received: unknown command")
-            response_data.response = "error"
-            response_data.iteration = self.iter
+            response_data.robot_db = "error"
         self.resp_pub.publish(response_data)
             
     def run(self):
