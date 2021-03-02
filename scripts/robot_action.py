@@ -10,6 +10,7 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 from cv_bridge import CvBridge
 import rospy
+import rospy_util.mathf as mathf
 from rospy_util.controller import Cmd, Controller, Sub
 from rospy_util.turtle_pose import TurtlePose
 
@@ -39,20 +40,29 @@ class RobotAction:
     dumbbell: Range[HSV_CV2]
 
 
-class State(IntEnum):
-    stop = 1
+class Retrieve(IntEnum):
+    locate = 1
+    face = 2
+    approach = 3
+
+
+class Place(IntEnum):
+    orient = 1
     locate = 2
     face = 3
     approach = 4
+
+
+State = Union[Retrieve, Place]
 
 
 @dataclass
 class Model:
     current_action: Optional[RobotAction]
     pending_actions: List[RobotAction]
-    have_dumbbell: bool
     last_image: Optional[ImageBGR]
     obstacle_dist: float
+    block_direction: Optional[float]  # TODO - refactor
     state: State
     cv_bridge: CvBridge
     keras_pipeline: ocr.Pipeline
@@ -61,10 +71,10 @@ class Model:
 init_model: Model = Model(
     current_action=None,
     pending_actions=[],
-    have_dumbbell=False,
     last_image=None,
     obstacle_dist=math.inf,
-    state=State.stop,
+    block_direction=None,
+    state=Retrieve.locate,
     cv_bridge=CvBridge(),
     keras_pipeline=ocr.Pipeline(scale=1.0),
 )
@@ -104,7 +114,10 @@ KP_ANG = math.pi / 8.0
 KP_LIN = 0.5
 
 DIST_STOP = 0.4
-DIR_BLOCKS = 0.0
+DIR_BLOCKS = math.pi
+
+# https://emanual.robotis.com/docs/en/platform/turtlebot3/appendix_raspi_cam/
+FOV_HORIZ = math.radians(62.2)
 
 RED: Range[HSV_CV2] = color.hsv_range(
     lower=(0, 90, 60),
@@ -130,7 +143,7 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
             return (model, cmd.none)
 
         (new_action, new_pending, new_state) = (
-            (action, model.pending_actions, State.locate)
+            (action, model.pending_actions, Retrieve.locate)
             if model.current_action is None
             else (
                 model.current_action,
@@ -153,62 +166,144 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
         return (new_model, cmd.none)
 
     if isinstance(msg, Scan):
-        ranges_sanitized = [r for r in msg.ranges if math.isfinite(r) and r > 0.2]
+        front = msg.ranges[:60] + msg.ranges[300:]
+        ranges_sanitized = [r for r in front if math.isfinite(r) and r > 0.2]
         closest = math.inf if not ranges_sanitized else min(ranges_sanitized)
 
         new_model = replace(model, obstacle_dist=closest)
         return (new_model, cmd.none)
 
-    if (
-        model.last_image is None
-        or model.current_action is None
-        or model.state == State.stop
-    ):
+    if model.last_image is None or model.current_action is None:
         return (model, cmd.none)
 
-    (new_state, cmds) = retrieve_dumbbell(
-        model.state,
-        model.last_image,
-        model.obstacle_dist,
-        model.current_action.dumbbell,
+    print(model.state)
+
+    if isinstance(model.state, Retrieve):
+        print("retrieve")
+        (new_state, cmds) = retrieve_dumbbell(
+            state=model.state,
+            img=model.last_image,
+            dist=model.obstacle_dist,
+            clr=model.current_action.dumbbell,
+        )
+
+        return (replace(model, state=new_state), cmds)
+
+    print("place")
+
+    (new_state, dir_block, cmds) = place_dumbbell(
+        state=model.state,
+        img=model.last_image,
+        dist=model.obstacle_dist,
+        yaw=msg.pose.yaw,
+        block=model.current_action.block,
+        dir_block=model.block_direction,
+        pline=model.keras_pipeline,
     )
 
-    return (replace(model, state=new_state), cmds)
+    return (
+        replace(
+            model,
+            state=new_state,
+            block_direction=dir_block,
+        ),
+        cmds,
+    )
 
 
+# TODO - call on image/scan message (not odom)
 def retrieve_dumbbell(
-    state: State,
+    state: Retrieve,
     img: ImageBGR,
     dist: float,
     clr: Range[HSV_CV2],
 ) -> Tuple[State, List[Cmd[Any]]]:
     if (img_pos := color.locate_color(clr, img)) is None:
-        return (State.locate, [cmd.turn(0.2)])
+        return (Retrieve.locate, [cmd.turn(0.2)])
 
-    if state == State.locate:
-        return (State.face, [cmd.stop])
+    if state == Retrieve.locate:
+        return (Retrieve.face, [cmd.stop])
 
     (cx, _) = img_pos
     err_ang = 1.0 - 2.0 * (cx / img.width)
 
-    if state == State.face:
+    if state == Retrieve.face:
         if abs(err_ang) < 0.05:
-            return (State.approach, [cmd.stop])
+            return (Retrieve.approach, [cmd.stop])
 
         vel_ang = KP_ANG * err_ang
         return (state, [cmd.turn(vel_ang)])
 
-    if state == State.approach:
-        if dist < DIST_STOP:
-            return (State.stop, [cmd.stop])
+    # if state == Retrieve.approach:
+    if dist < DIST_STOP:
+        return (Place.orient, [cmd.stop])
 
-        err_lin = min(dist - DIST_STOP, 1.0)
-        vel_lin = KP_LIN * err_lin
-        vel_ang = KP_ANG * err_ang
+    err_lin = min(dist - DIST_STOP, 1.0)
+    vel_lin = min(KP_LIN * err_lin, 0.1)
+    vel_ang = KP_ANG * err_ang
 
-        return (state, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
+    return (state, [cmd.velocity(linear=vel_lin, angular=vel_ang)])
 
-    return (state, cmd.none)
+
+def place_dumbbell(
+    state: Place,
+    img: ImageBGR,
+    dist: float,
+    yaw: float,
+    block: Block,
+    dir_block: Optional[float],
+    pline: ocr.Pipeline,
+) -> Tuple[State, Optional[float], List[Cmd[Any]]]:
+    print("hi")
+    if state == Place.orient:
+        if abs(err_ang := (DIR_BLOCKS - yaw) / math.pi) < 0.05:
+            return (Place.locate, dir_block, [cmd.stop])
+
+        vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.3)
+        return (state, dir_block, [cmd.turn(vel_ang)])
+
+    if state == Place.locate:
+        if (img_pos := ocr.locate_number(pline, block.value, img)) is None:
+            print("rip")
+            return (Place.locate, dir_block, cmd.none)
+
+        print(img_pos)
+
+        (cx, _) = img_pos
+        err_ang = 0.5 - (cx / img.width)
+        yaw_off = FOV_HORIZ * err_ang
+        dir_block = yaw + yaw_off
+
+        print(dir_block)
+
+        return (Place.face, dir_block, cmd.none)
+
+    if state == Place.face:
+        # TODO - eliminate
+        if dir_block is None:
+            print("rip rip")
+            return (Place.locate, dir_block, cmd.none)
+
+        err_ang = dir_block - yaw
+
+        if abs(err_ang) < 0.05:
+            return (Place.approach, dir_block, [cmd.stop])
+
+        vel_ang = mathf.sign(err_ang) * max(0.5 * err_ang, 0.1)
+
+        return (state, dir_block, [cmd.turn(vel_ang)])
+
+    # if state == Place.approach:
+    if dist < 1.5:
+        return (Place.face, None, [cmd.stop])
+
+    if dist < DIST_STOP:
+        return (state, dir_block, [cmd.stop])
+
+    err_lin = min(dist - 0.3, 1.0)
+    vel_lin = 0.4 * err_lin
+
+    return (state, dir_block, [cmd.drive(vel_lin)])
 
 
 def parse_action(action: RobotMoveDBToBlock) -> Optional[RobotAction]:
