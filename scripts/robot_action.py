@@ -3,7 +3,7 @@
 # pyright: reportMissingTypeStubs=false
 
 from dataclasses import dataclass, replace
-from enum import Enum
+from enum import IntEnum
 from functools import partial
 import math
 from typing import Any, Callable, List, Optional, Tuple, Union
@@ -13,17 +13,19 @@ from sensor_msgs.msg import LaserScan
 import rospy
 from rospy_util.controller import Cmd, Controller, Sub
 
+# TODO - packages to clean up imports
 import controller.cmd as cmd
 from controller.sub import RobotAction
 import controller.sub as sub
-from data.image import ImageHSV, ImageROS
+from data.image import ImageBGR, ImageROS
 import data.image as image
 import perception.color as color
+import perception.ocr as ocr
 from util import compose
 
 ### Model ###
 
-Locator = Callable[[ImageHSV], Optional[Tuple[int, int]]]
+Locator = Callable[[ImageBGR], Optional[Tuple[int, int]]]
 
 
 @dataclass
@@ -32,7 +34,7 @@ class ActionLocators:
     locator_dumbbell: Locator
 
 
-class State(Enum):
+class State(IntEnum):
     stop = 1
     locate = 2
     face = 3
@@ -43,19 +45,21 @@ class State(Enum):
 class Model:
     current_action: Optional[ActionLocators]
     pending_actions: List[ActionLocators]
-    last_image: Optional[ImageHSV]
     have_dumbbell: bool
+    last_image: Optional[ImageBGR]
     state: State
-    cvBridge: CvBridge
+    cv_bridge: CvBridge
+    keras_pipeline: ocr.Pipeline
 
 
 init_model: Model = Model(
     current_action=None,
     pending_actions=[],
-    last_image=None,
     have_dumbbell=False,
+    last_image=None,
     state=State.stop,
-    cvBridge=CvBridge(),
+    cv_bridge=CvBridge(),
+    keras_pipeline=ocr.Pipeline(scale=1.0),
 )
 
 init: Tuple[Model, List[Cmd[Any]]] = (init_model, cmd.none)
@@ -71,7 +75,7 @@ class Action:
 
 @dataclass
 class Image:
-    image: ImageHSV
+    image: ImageBGR
 
 
 @dataclass
@@ -92,12 +96,13 @@ Msg = Union[Action, Image, Obstacle, Void]
 KP_ANG = math.pi / 8.0
 KP_LIN = 0.5
 
-STOP_DIST = 0.4
+DIST_STOP = 0.4
+DIR_BLOCKS = 0.0
 
 
 def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     if isinstance(msg, Action):
-        if (action := locators_from_action(msg.action)) is None:
+        if (action := locators_from_action(model.keras_pipeline, msg.action)) is None:
             print(f"invalid action: {msg.action}")
             return (model, cmd.none)
 
@@ -162,7 +167,7 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
         return (model, [cmd.turn(vel_ang)])
 
     if model.state == State.approach:
-        if msg.distance < STOP_DIST:
+        if msg.distance < DIST_STOP:
             if model.have_dumbbell:
                 # TODO - place dumbbell down
 
@@ -199,7 +204,7 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
                 cmd.none,
             )
 
-        err_lin = msg.distance - STOP_DIST
+        err_lin = msg.distance - DIST_STOP
 
         vel_ang = KP_ANG * err_ang
         vel_lin = KP_LIN * err_lin
@@ -209,8 +214,11 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     return (model, cmd.none)
 
 
-def locators_from_action(action: RobotAction) -> Optional[ActionLocators]:
-    if (loc_block := block_locator(action.block_id)) is None or (
+def locators_from_action(
+    pipeline: ocr.Pipeline,
+    action: RobotAction,
+) -> Optional[ActionLocators]:
+    if (loc_block := block_locator(pipeline, action.block_id)) is None or (
         loc_dumbbell := dumbbell_locator(action.robot_db)
     ) is None:
         return None
@@ -218,9 +226,8 @@ def locators_from_action(action: RobotAction) -> Optional[ActionLocators]:
     return ActionLocators(loc_block, loc_dumbbell)
 
 
-def block_locator(id: int) -> Optional[Locator]:
-    # TODO
-    return color.locate_green
+def block_locator(pipeline: ocr.Pipeline, id: int) -> Optional[Locator]:
+    return partial(ocr.locate_number, pipeline, id) if id >= 1 and id <= 3 else None
 
 
 def dumbbell_locator(clr: str) -> Optional[Locator]:
@@ -241,7 +248,7 @@ def dumbbell_locator(clr: str) -> Optional[Locator]:
 def subscriptions(model: Model) -> List[Sub[Any, Msg]]:
     return [
         sub.robot_action(Action),
-        sub.image_sensor(toImageHSV(model.cvBridge)),
+        sub.image_sensor(toImageCV2(model.cv_bridge)),
         sub.laser_scan(obstacle),
     ]
 
@@ -252,14 +259,10 @@ def obstacle(scan: LaserScan) -> Msg:
     if not ranges:
         return Void()
 
-    closest = min(ranges)
-
-    print(closest)
-
-    return Obstacle(distance=closest)
+    return Obstacle(distance=min(ranges))
 
 
-def toImageHSV(cvBridge: CvBridge) -> Callable[[ImageROS], Msg]:
+def toImageCV2(cvBridge: CvBridge) -> Callable[[ImageROS], Msg]:
     return compose(Image, partial(image.from_ros_image, cvBridge))
 
 

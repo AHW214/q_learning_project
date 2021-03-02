@@ -5,7 +5,8 @@ from typing import Dict, NewType, Optional, Tuple
 import cv2
 from numpy import array, uint8
 
-from data.image import ImageHSV
+from data.image import ImageBGR
+import data.image as image
 
 HSV = NewType("HSV", Tuple[uint8, uint8, uint8])
 
@@ -14,9 +15,11 @@ def locate_color(
     lower_bound: Tuple[int, int, int],
     upper_bound: Tuple[int, int, int],
 ):
-    def locate(image: ImageHSV) -> Optional[Tuple[int, int]]:
+    def locate(img: ImageBGR) -> Optional[Tuple[int, int]]:
+        hsv = image.to_hsv(img)
+
         masked = cv2.inRange(
-            src=image.data,
+            src=hsv.data,
             lowerb=array(hsv_from_rgb(*lower_bound)),
             upperb=array(hsv_from_rgb(*upper_bound)),
         )
