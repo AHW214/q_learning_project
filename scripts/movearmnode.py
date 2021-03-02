@@ -41,7 +41,7 @@ class Robot(object):
         
         #Get a publisher to the cmd_vel topic
         self.twist_pub = rospy.Publisher ("/cmd_vel", Twist, queue_size = 10)
-        self.resp_pub = rospy.Publisher("/q_learning/res_arm", ArmResponse, queue_Size=10)
+        self.resp_pub = rospy.Publisher("/q_learning/res_arm", ArmResponse, queue_size=10)
         
         #Create a default twist msg (all values 0)
         lin = Vector3()
