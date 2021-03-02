@@ -32,8 +32,8 @@ def locate_number(
         color=(255, 0, 0),
         thickness=2,
     )
-    cv2.imshow("window", rec)
-    cv2.waitKey(3)
+    # cv2.imshow("window", rec)
+    # cv2.waitKey(3)
 
     (cx, cy) = center_of_box(box)
 
