@@ -6,14 +6,15 @@ from q_learning_project.msg import RobotMoveDBToBlock
 from rospy_util.controller import Sub
 from sensor_msgs.msg import LaserScan, Image
 
-RobotAction = RobotMoveDBToBlock
 Msg = TypeVar("Msg")
 
 
-def robot_action(to_msg: Callable[[RobotAction], Msg]) -> Sub[RobotAction, Msg]:
+def robot_action(
+    to_msg: Callable[[RobotMoveDBToBlock], Msg],
+) -> Sub[RobotMoveDBToBlock, Msg]:
     return Sub(
         topic_name="/q_learning/robot_action",
-        message_type=RobotAction,
+        message_type=RobotMoveDBToBlock,
         to_msg=to_msg,
     )
 
