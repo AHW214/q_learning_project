@@ -12,8 +12,8 @@
 ### Selecting and executing actions for the robot (or phantom robot) to take
 - The current script used for the q-learning algorithm is q-algorithm.py. 
 - Selecting and executing actions for the robot (or phantom robot) to take
-- - We select actions for the phantom robot to take by using the action matrix, which tells which actions are legal given a specific state of the robot. Once we have a list of legal actions, we randomly choose one and publish the desired action. We include some rospy.sleep() calls in order to ensure that the reward is received before proceeding.
-- - The action matrix is created in initialize_action_matrix. The selection of a random action given the current state is done at the beginning of the fill_qmatrix function. This is also where we publish the movements to the phantom robot. I use a variety of helper functions to translate between the state and action numbers and the orientations of the dumbbells. These are the functions find_state, locations_from_state, find_action, and inverse_action. I also have helper functions to check if a particular dumbbell configuration is allowed (valid_state), to apply an action to a state and get the resulting state (apply_action), and check if the state is an “end state” where every dumbbell is at a block, and there are no more legal moves (end_state). 
+  - We select actions for the phantom robot to take by using the action matrix, which tells which actions are legal given a specific state of the robot. Once we have a list of legal actions, we randomly choose one and publish the desired action. We include some rospy.sleep() calls in order to ensure that the reward is received before proceeding.
+  - The action matrix is created in initialize_action_matrix. The selection of a random action given the current state is done at the beginning of the fill_qmatrix function. This is also where we publish the movements to the phantom robot. I use a variety of helper functions to translate between the state and action numbers and the orientations of the dumbbells. These are the functions find_state, locations_from_state, find_action, and inverse_action. I also have helper functions to check if a particular dumbbell configuration is allowed (valid_state), to apply an action to a state and get the resulting state (apply_action), and check if the state is an “end state” where every dumbbell is at a block, and there are no more legal moves (end_state). 
 ### Updating the Q-matrix
 - We update the q-matrix via the algorithm described on the project page. Once a particular action has been performed and a reward has been received, we look at the potential rewards from the new robot state (by looking up another appropriate row in the q-matrix) and take the maximum value. We chose to use the parameters alpha = 1 and gamma = 0.5. We increment the value of the current index in the q-matrix by the quantity alpha * (reward + gamma * maximum_value - current_index).
 - Updating the q-matrix also happens in the fill_qmatrix function. We check if the updated value of the q-matrix is the same as it was before, and if it is not, we change it and publish the new q-matrix.  
@@ -54,14 +54,14 @@ Describe how you accomplished each of the following components of the robot mani
 ### Picking up the dumbbell
 - Once properly aligned and at a sufficient distance from the dumbbell, the manipulator arm is placed into a position where it can grab the center of the dumbbell. Using proportional control and forward motion the robot approaches until the gripper is properly around the handle of the dumbbell. Angular and distance control are used for this precise movement. The gripper is closed and the manipulator raises the dumbbell to a position where it can be carried without falling. 
 - Functions involved: pickup_db runs lift_dumbbell, open_gripper, face_dumbbell, reach_dumbbell, approach_dumbbell, close_gripper, and lift_dumbbell. Proccess_scan is run every time a scan is received from the lidar and approach dumbbell and face_dumbbell are called from process scan if the appropriate flags are set requesting these actions. These flags are set within pickup_db so they in effect, call face_dumbbell and approach_dumbbell via the process scan function. 
--- open_gripper sets a gripper joint goal and uses the move_group to achieve that goal. 
--- close_gripper sets a gripper joint goal and uses the move_group to achieve that goal.
--- reach_dumbbell sets an arm joint goal to position the arm joint to reach out and be ready to grab the dumbbell and uses the move_group to achieve that goal. 
--- lift_dumbbell sets an arm joint goal to raise the dumbbell into the air and uses a move_group to affect that motion. 
--- face_dumbbell is called by proccess_scan when laser scan data is received if the self.turning flag is true.
--- approach _dumbbell is called in proccess_scan if the self.moving flag is set to true. Approach_dumbbell continues to move forward until the gripper is at the right distance to be able to grab the dumbbell and it publishes twist messages onto cmd_vel to control movement. 
--- Proccess_scan 
-- add pictures, Youtube videos, and/or embedded animated gifs
+  - open_gripper sets a gripper joint goal and uses the move_group to achieve that goal. 
+  - close_gripper sets a gripper joint goal and uses the move_group to achieve that goal.
+  - reach_dumbbell sets an arm joint goal to position the arm joint to reach out and be ready to grab the dumbbell and uses the move_group to achieve that goal. 
+  - lift_dumbbell sets an arm joint goal to raise the dumbbell into the air and uses a move_group to affect that motion. 
+  - face_dumbbell is called by proccess_scan when laser scan data is received if the self.turning flag is true.
+  - approach _dumbbell is called in proccess_scan if the self.moving flag is set to true. Approach_dumbbell continues to move forward until the gripper is at the right distance to be able to grab the dumbbell and it publishes twist messages onto cmd_vel to control movement. 
+  - Proccess_scan 
+ - add pictures, Youtube videos, and/or embedded animated gifs
 
 ### Moving to the desired destination (numbered block) with the dumbbell
 - Describe how you accomplished each of the following components of the robot manipulation and movement elements of this project in 1-3 sentences
