@@ -4,6 +4,7 @@ import rospy
 
 from q_learning_project.msg import QLearningReward
 from q_learning_project.msg import QMatrix
+from q_learning_project.msg import QMatrixRow
 from q_learning_project.msg import RobotMoveDBToBlock
 from q_learning_project.msg import Actions
 
@@ -34,8 +35,13 @@ class QLearn(object):
 
     def publish_qmatrix(self):
         matrix = QMatrix()
+        matrix.q_matrix = []
+        for x in range(0, 64):
+            row = self.q[x]
+            matrixrow = QMatrixRow()
+            matrixrow.q_matrix_row = row
+            matrix.q_matrix.append(matrixrow)
         matrix.header = Header(stamp=rospy.Time.now())
-        matrix.q_matrix = self.q
         self.matrix_pub.publish(matrix)
 
     def initialize_action_matrix(self):
