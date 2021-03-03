@@ -53,6 +53,7 @@ add_message_files(
     QLearningReward.msg
     QMatrix.msg
     QMatrixRow.msg
+    Actions.msg
     RobotMoveDBToBlock.msg
 )
 

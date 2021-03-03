@@ -5,6 +5,7 @@ import rospy
 from q_learning_project.msg import QLearningReward
 from q_learning_project.msg import QMatrix
 from q_learning_project.msg import RobotMoveDBToBlock
+from q_learning_project.msg import Actions
 
 from std_msgs.msg import Header
 import time
@@ -19,6 +20,7 @@ class QLearn(object):
         rospy.Subscriber("/q_learning/reward", QLearningReward, self.action_reward)
         self.matrix_pub = rospy.Publisher("q_learning/q_matrix", QMatrix, queue_size=10)
         self.move_pub = rospy.Publisher("q_learning/robot_action", RobotMoveDBToBlock, queue_size=10)
+        self.actions_pub = rospy.Publisher("q_learning/optimal_actions", Actions, queue_size=10)
         #Creating the Q Matrix structure
         self.q = np.zeros((64,9), dtype=int)
         self.publish_qmatrix()
@@ -114,13 +116,19 @@ class QLearn(object):
         print('\nQ-Learning algorithm completed!')
         try:
             print('The actions that give the highest reward are: ')
+            optimal_actions = Actions()
             actions = np.arange(9)
             state = 0
             for x in range(0, 3):
                 action = random.choice(actions[(self.q[state])>0])
                 color, block = self.inverse_action(action)
                 print(x+1,') Move',  self.dumbbell_color(color), "to block", block)
+                optimal_action = RobotMoveDBToBlock()
+                optimal_action.robot_db = self.dumbbell_color(color)
+                optimal_action.block_id = block
+                optimal_actions.actions.append(optimal_action)
                 state = self.apply_action(state, action)
+            self.actions_pub.publish(optimal_actions)
         except:
             print("Something went wrong. Try running again?")
 
