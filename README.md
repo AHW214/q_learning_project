@@ -10,6 +10,7 @@ We use a q-learning algorithm to determine the correct orientation of the dumbbe
 ### Gif 1 demonstrates the robot successfully executing the task
 
 Gif 1
+
 ![ShortQLearn](https://user-images.githubusercontent.com/68019178/109866278-b578de00-7c2a-11eb-8e42-add33781c6b7.gif)
 
 ## Q-learning algorithm description
