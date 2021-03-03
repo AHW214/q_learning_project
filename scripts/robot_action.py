@@ -162,7 +162,7 @@ Msg = Union[
 
 ### Update ###
 
-KP_ANG_SPIN = math.pi / 6.0
+KP_ANG_SPIN = math.pi / 1.5
 KP_ANG_FACE = math.pi / 8.0
 
 VEL_ANG_SPIN_MIN = math.pi / 10
@@ -171,7 +171,7 @@ VEL_ANG_FACE_MIN = math.pi / 30
 KP_LIN_TO_DB = 0.5
 KP_LIN_TO_BLOCK = 0.4
 
-VEL_LIN_TO_DB_MAX = 0.5
+VEL_LIN_TO_DB_MAX = 0.3
 VEL_LIN_TO_BLOCK_MAX = 0.5
 
 DIST_STOP_DB = 0.4

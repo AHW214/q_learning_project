@@ -48,7 +48,6 @@ class Robot(object):
         lin = Vector3()
         ang = Vector3()
         self.twist = Twist(linear=lin, angular=ang)
-        self.turning = False
         self.moving = False
 
     def home_pose(self):
@@ -91,48 +90,45 @@ class Robot(object):
         self.move_group_arm.go(arm_joint_goal, wait=True)
         self.move_group_arm.stop()
         self.open_gripper()
-        self.twist.linear.x = -0.05
+        self.twist.linear.x = -0.07
         self.twist_pub.publish(self.twist)
-        rospy.sleep(3)
+        rospy.sleep(4)
         self.twist.linear.x = 0
         self.twist_pub.publish(self.twist)
 
-    def face_dumbbell(self, db_dir: float):
-        err_min = 0.05
-        vel_ang = math.pi / 4
+    def approach_dumbbell(self, db_dir: float, db_dist: float):
+        err_lin_min = 0.22  # stay 1/4 meters away from the dumbbell
+        kp_lin = 0.1
 
-        if abs(db_dir) <= err_min:
-            self.turning = False
-            self.twist.angular.z = 0
+        err_ang_min = 0.005
+        kp_ang = math.pi / 2
+
+        twist = Twist()
+
+        if abs(db_dir) > err_ang_min:
+            twist.angular.z = kp_ang * db_dir
+
+        if db_dist > err_lin_min:  # if we are far enough from the db
+            twist.linear.x = kp_lin * db_dist
         else:
-            self.turning = True
-            self.twist.angular.z = vel_ang * db_dir
-        self.twist_pub.publish(self.twist)
-
-    def approach_dumbbell(self, db_dist: float):
-        distance = 0.25  # stay 1/4 meters away from the dumbbell
-        speed = 0.02  # m/s
-
-        if db_dist > distance:  # if we are far enough from the db
-            self.twist.linear.x = speed
-            self.moving = True
-        else:
-            self.twist.linear.x = 0
             self.moving = False
-        self.twist_pub.publish(self.twist)
+
+        print(twist)
+
+        self.twist_pub.publish(twist)
 
     def process_scan(self, data):
         def rad_signed(deg: int) -> float:
             return math.radians(deg - 360 if deg > 180 else deg)
 
-        if not self.turning and not self.moving:
+        if not self.moving:
             return
 
         angled = [*enumerate(data.ranges)]
 
         front_ranges = [
             (rad_signed(deg), dist)
-            for (deg, dist) in angled[:10] + angled[350:]
+            for (deg, dist) in angled[350:] + angled[:10]
             if math.isfinite(dist)
         ]
 
@@ -141,29 +137,23 @@ class Robot(object):
             self.resp_pub.publish(ArmResult(error="no front scan data"))
             return
 
-        (dir_min, dist_min) = min(front_ranges)
+        (dirs, dists) = [*zip(*front_ranges)]
+
+        dir_min = (dirs[0] + dirs[-1]) / 2.0 if len(dirs) > 1 else dirs[0]
+
+        dist_min = min(dists)
 
         print(dir_min, dist_min)
 
-        if self.turning:
-            self.face_dumbbell(dir_min)
-        if self.moving:
-            self.approach_dumbbell(dist_min)
-        self.twist_pub.publish(self.twist)
+        self.approach_dumbbell(dir_min, dist_min)
 
     def pickup_db(self):
         rate = rospy.Rate(1)
         rate.sleep()
         self.moving = False  # boolean for moving toward db
-        self.turning = False  # boolean for turning toward db
         self.twist_pub.publish(Twist())  # stop moving
         print("resetting position...")
         self.home_pose()
-        # print("setting orientation:")
-        # TODO - disabled turning for now
-        self.turning = False
-        while self.turning == True:
-            rospy.sleep(0.1)  # wait for orienting toward db
         print("open gripper...")
         self.open_gripper()
         print("reach_dumbbell..")

@@ -46,7 +46,7 @@ def locate_front_facing_text(
     img: ImageBGR,
 ) -> Optional[ndarray]:
     boxes = locate_all_text(pipeline, text, img)
-    return None if not boxes else max(boxes, key=area_of_box)
+    return None if not boxes else max(boxes, key=width_of_box)
 
 
 def locate_all_text(pipeline: Pipeline, text: str, img: ImageBGR) -> List[ndarray]:
@@ -63,6 +63,11 @@ def recognize(pipeline: Pipeline, img: ImageBGR) -> List[Prediction]:
 def area_of_box(box: ndarray) -> float:
     (w, h) = dimensions_of_box(box)
     return w * h
+
+
+def width_of_box(box: ndarray) -> float:
+    (w, _) = dimensions_of_box(box)
+    return w
 
 
 def dimensions_of_box(box: ndarray) -> Tuple[float, float]:
