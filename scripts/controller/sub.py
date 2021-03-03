@@ -8,10 +8,18 @@ from rospy_util.turtle_pose import TurtlePose
 import rospy_util.turtle_pose as tp
 from sensor_msgs.msg import Image, LaserScan
 
-from q_learning_project.msg import RobotMoveDBToBlock
+from q_learning_project.msg import ArmResult, RobotMoveDBToBlock
 
 
 Msg = TypeVar("Msg")
+
+
+def arm_result(to_msg: Callable[[ArmResult], Msg]) -> Sub[ArmResult, Msg]:
+    return Sub(
+        topic_name="/q_learning/arm_res",
+        message_type=ArmResult,
+        to_msg=to_msg,
+    )
 
 
 def robot_action(
