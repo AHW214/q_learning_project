@@ -55,13 +55,10 @@ Describe how you accomplished each of the following components of the perception
 ### Putting the dumbbell back down at the desired destination
 - Once oriented in front of the correct block a calculated sequence of motions are used to lower the dumbbell to the ground, open the manipulator arm, and then move back slowly to leave the dumbbell in an upright position in front of the appropriate block. This action is signaled by the movement node over the /cmd_arm topic with the message “down”.
 - putdown_db is a method that calls set_dumbbell and open_gripper. Set_dumbbell ses an arm joint goal to properly lower the dumbbell to the ground using move_group to affect that goal. It then calls open_gripper to release the dumbbell and then it publishes a twist message to slowly back away from the dumbbell, leaving it in place. Command_received is the method that monitors the topic /cmd_arm and makes hte call to putdown_db when the message is “down”. Once the action is complete, the /res_arm topic is published with the message “done” signaling that the action is completed.
-
-####The Gif 1 and Gif 2 demonstrate the robot orienting itself to the the dumbbell, picking up the dumbbell, moving a little bit, and setting the dumbbell down 
-
-#####Gif 1
+### Gif 1 and Gif 2 demonstrate the robot orienting itself to the the dumbbell, picking up the dumbbell, moving a little bit, and setting the dumbbell down 
+Gif 1
 ![MoveLiftSet (1)](https://user-images.githubusercontent.com/68019178/109749259-e102b680-7b9f-11eb-882b-97a5dbe9b70a.gif)
-
-#####Gif 2
+Gif 2
 ![FirstLiftmoveSet](https://user-images.githubusercontent.com/68019178/109749277-e7912e00-7b9f-11eb-9497-275fcb495c96.gif)
 
 ## Challenges
