@@ -159,8 +159,9 @@ class Robot(object):
         self.twist_pub.publish(Twist())  # stop moving
         print("resetting position...")
         self.home_pose()
-        print("setting orientation:")
-        self.turning = True
+        # print("setting orientation:")
+        # TODO - disabled turning for now
+        self.turning = False
         while self.turning == True:
             rospy.sleep(0.1)  # wait for orienting toward db
         print("open gripper...")
