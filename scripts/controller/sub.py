@@ -8,7 +8,7 @@ from rospy_util.turtle_pose import TurtlePose
 import rospy_util.turtle_pose as tp
 from sensor_msgs.msg import Image, LaserScan
 
-from q_learning_project.msg import ArmResult, RobotMoveDBToBlock
+from q_learning_project.msg import Actions, ArmResult, RobotMoveDBToBlock
 
 
 __all__ = (
@@ -23,6 +23,16 @@ def arm_result(to_msg: Callable[[ArmResult], Msg]) -> Sub[ArmResult, Msg]:
     return Sub(
         topic_name="/q_learning/arm_res",
         message_type=ArmResult,
+        to_msg=to_msg,
+    )
+
+
+def optimal_actions(
+    to_msg: Callable[[Actions], Msg],
+) -> Sub[Actions, Msg]:
+    return Sub(
+        topic_name="/q_learning/optimal_actions",
+        message_type=Actions,
         to_msg=to_msg,
     )
 

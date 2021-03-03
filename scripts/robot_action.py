@@ -25,7 +25,7 @@ import data.image as image
 from perception.color import HSV_CV2, Range
 import perception.color as color
 import perception.ocr as ocr
-from q_learning_project.msg import ArmResult, RobotMoveDBToBlock
+from q_learning_project.msg import Actions, ArmResult, RobotMoveDBToBlock
 from util import compose, head
 
 ### Model ###
@@ -127,8 +127,8 @@ init: Tuple[Model, List[Cmd[Any]]] = (init_model, cmd.none)
 
 
 @dataclass
-class Action:
-    action: RobotMoveDBToBlock
+class Actions:
+    actions: Actions
 
 
 @dataclass
@@ -152,7 +152,7 @@ class Scan:
 
 
 Msg = Union[
-    Action,
+    Actions,
     Arm,
     Image,
     Odom,
@@ -171,7 +171,7 @@ VEL_ANG_FACE_MIN = math.pi / 30
 KP_LIN_TO_DB = 0.5
 KP_LIN_TO_BLOCK = 0.4
 
-VEL_LIN_TO_DB_MAX = 0.8
+VEL_LIN_TO_DB_MAX = 0.5
 VEL_LIN_TO_BLOCK_MAX = 0.5
 
 DIST_STOP_DB = 0.4
@@ -204,13 +204,15 @@ BLUE: Range[HSV_CV2] = color.hsv_range(
 
 
 def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
-    if isinstance(msg, Action):
-        if (action := parse_action(msg.action)) is None:
-            print(f"invalid action: {msg.action}")
+    if isinstance(msg, Actions):
+        parsed = [parse_action(act) for act in msg.actions.actions]
+        new_actions = [act for act in parsed if act is not None]
+
+        if not new_actions:
+            print("received invalid actions")
             return (model, cmd.none)
 
-        actions = [*model.actions, action]
-
+        actions = model.actions + new_actions
         return (replace(model, actions=actions), cmd.none)
 
     if (action := head(model.actions)) is None:
@@ -419,7 +421,7 @@ def parse_dumbbell(clr: str) -> Optional[Range[HSV_CV2]]:
 
 def subscriptions(model: Model) -> List[Sub[Any, Msg]]:
     return [
-        sub.robot_action(Action),
+        sub.optimal_actions(Actions),
         sub.arm_result(Arm),
         sub.image_sensor(toImageCV2(model.cv_bridge)),
         sub.odometry(Odom),
