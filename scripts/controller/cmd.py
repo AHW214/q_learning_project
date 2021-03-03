@@ -4,13 +4,31 @@
 from geometry_msgs.msg import Twist, Vector3
 from rospy_util.controller.cmd import Cmd, none
 
+from q_learning_project.msg import ArmCommand
+
 __all__ = (
     "drive",
     "none",
+    "pickup_dumbbell",
+    "place_dumbbell",
     "stop",
     "turn",
     "velocity",
 )
+
+
+def command_arm(cmd: str) -> Cmd[ArmCommand]:
+    return Cmd(
+        topic_name="/q_learning/arm_cmd",
+        message_type=ArmCommand,
+        message_value=ArmCommand(cmd),
+        latch_publisher=True,
+    )
+
+
+place_dumbbell: Cmd[ArmCommand] = command_arm("down")
+
+lift_dumbbell: Cmd[ArmCommand] = command_arm("up")
 
 
 def twist_from_velocities(linear_x: float, angular_z: float) -> Twist:

@@ -65,7 +65,7 @@ class Robot(object):
 
     def close_gripper(self):
         gripper_joint_goal = self.move_group_gripper.get_current_joint_values()
-        gripper_joint_goal = [-0.005, -0.005]
+        gripper_joint_goal = [0.008, 0.008]
         self.move_group_gripper.go(gripper_joint_goal, wait=True)
         self.move_group_gripper.stop()
 
@@ -93,7 +93,7 @@ class Robot(object):
         self.open_gripper()
         self.twist.linear.x = -0.05
         self.twist_pub.publish(self.twist)
-        rospy.sleep(2)
+        rospy.sleep(3)
         self.twist.linear.x = 0
         self.twist_pub.publish(self.twist)
 
@@ -110,7 +110,7 @@ class Robot(object):
         self.twist_pub.publish(self.twist)
 
     def approach_dumbbell(self, db_dist: float):
-        distance = 0.22  # stay 1/4 meters away from the dumbbell
+        distance = 0.25  # stay 1/4 meters away from the dumbbell
         speed = 0.02  # m/s
 
         if db_dist > distance:  # if we are far enough from the db
@@ -158,9 +158,7 @@ class Robot(object):
         self.turning = False  # boolean for turning toward db
         self.twist_pub.publish(Twist())  # stop moving
         print("resetting position...")
-        self.lift_dumbbell()
-        print("open gripper...")
-        self.open_gripper()
+        self.home_pose()
         print("setting orientation:")
         self.turning = True
         while self.turning == True:

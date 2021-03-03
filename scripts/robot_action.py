@@ -25,7 +25,7 @@ import data.image as image
 from perception.color import HSV_CV2, Range
 import perception.color as color
 import perception.ocr as ocr
-from q_learning_project.msg import RobotMoveDBToBlock
+from q_learning_project.msg import ArmResult, RobotMoveDBToBlock
 from util import compose, head
 
 ### Model ###
@@ -59,6 +59,11 @@ class ApproachDumbbell:
 
 
 @dataclass
+class LiftDumbbell:
+    pass
+
+
+@dataclass
 class FaceBlocks:
     ocr_targets: List[Vector2]
 
@@ -80,14 +85,21 @@ class ApproachBlock:
     alignments: int
 
 
+@dataclass
+class PlaceDumbbell:
+    pass
+
+
 State = Union[
     FaceDumbbells,
     FaceDumbbell,
     ApproachDumbbell,
+    LiftDumbbell,
     FaceBlocks,
     LocateBlock,
     FaceBlock,
     ApproachBlock,
+    PlaceDumbbell,
 ]
 
 
@@ -101,7 +113,7 @@ class Model:
 
 
 init_model: Model = Model(
-    state=FaceDumbbells(),
+    state=FaceDumbbell(),
     actions=[],
     image=None,
     cv_bridge=CvBridge(),
@@ -117,6 +129,11 @@ init: Tuple[Model, List[Cmd[Any]]] = (init_model, cmd.none)
 @dataclass
 class Action:
     action: RobotMoveDBToBlock
+
+
+@dataclass
+class Arm:
+    status: ArmResult
 
 
 @dataclass
@@ -136,6 +153,7 @@ class Scan:
 
 Msg = Union[
     Action,
+    Arm,
     Image,
     Odom,
     Scan,
@@ -156,8 +174,8 @@ KP_LIN_TO_BLOCK = 0.4
 VEL_LIN_TO_DB_MAX = 0.8
 VEL_LIN_TO_BLOCK_MAX = 0.5
 
-DIST_STOP_DB = 0.22
-DIST_STOP_BLOCK = 0.3
+DIST_STOP_DB = 0.4
+DIST_STOP_BLOCK = 0.4
 DIST_BLOCK_ALIGNMENT = 1.5
 
 POS_DBS = Vector2(x=1.0, y=0.0)
@@ -216,6 +234,27 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
     )
 
     print(model.state)
+
+    if isinstance(msg, Arm):
+        if msg.status.error:
+            # TODO
+            print(f"failed top operate arm: {msg.status.error}")
+            return (model, cmd.none)
+
+        if isinstance(model.state, LiftDumbbell):
+            ocr_targets = [POS_BLOCK_LEFT, POS_BLOCK_RIGHT]
+            return (replace(model, state=FaceBlocks(ocr_targets)), cmd.none)
+
+        if isinstance(model.state, PlaceDumbbell):
+            new_model = replace(
+                model,
+                actions=model.actions[1:],
+                state=FaceDumbbells(),
+            )
+
+            return (new_model, cmd.none)
+
+        return (model, cmd.none)
 
     if isinstance(msg, Odom):
         if isinstance(model.state, FaceDumbbells):
@@ -287,14 +326,10 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
                 return (replace(model, state=new_state), [cmd.stop])
 
             if msg.obstacle_dist < DIST_STOP_BLOCK:
-                # TODO - place dumbbell
-                new_model = replace(
-                    model,
-                    actions=model.actions[1:],
-                    state=FaceDumbbell(),
+                return (
+                    replace(model, state=PlaceDumbbell()),
+                    [cmd.stop, cmd.place_dumbbell],
                 )
-
-                return (new_model, [cmd.stop])
 
             err_lin = msg.obstacle_dist - DIST_STOP_BLOCK
             vel_lin = min(KP_LIN_TO_BLOCK * err_lin, VEL_LIN_TO_BLOCK_MAX)
@@ -303,8 +338,10 @@ def update(msg: Msg, model: Model) -> Tuple[Model, List[Cmd[Any]]]:
 
         if isinstance(model.state, ApproachDumbbell) and model.image is not None:
             if msg.obstacle_dist < DIST_STOP_DB:
-                ocr_targets = [POS_BLOCK_LEFT, POS_BLOCK_RIGHT]
-                return (replace(model, state=FaceBlocks(ocr_targets)), [cmd.stop])
+                return (
+                    replace(model, state=LiftDumbbell()),
+                    [cmd.stop, cmd.lift_dumbbell],
+                )
 
             if (err_ang := dumbell_alignment_error(model.image)) is None:
                 return (model, [cmd.turn(0.2)])
@@ -383,6 +420,7 @@ def parse_dumbbell(clr: str) -> Optional[Range[HSV_CV2]]:
 def subscriptions(model: Model) -> List[Sub[Any, Msg]]:
     return [
         sub.robot_action(Action),
+        sub.arm_result(Arm),
         sub.image_sensor(toImageCV2(model.cv_bridge)),
         sub.odometry(Odom),
         sub.laser_scan(partial(obstacle, FOV_LIDAR)),
