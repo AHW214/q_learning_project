@@ -28,7 +28,6 @@ class QLearn(object):
         # initialize these values to help later with determining convergence
         self.count=0
         self.reward=0
-        print("Q Matrix Initialized")
         # creating the action matrix:
         self.actions = np.zeros((64,64), dtype=int)
         self.initialize_action_matrix()
@@ -78,7 +77,6 @@ class QLearn(object):
                     continue
                 required_action = self.find_action(moved_dumbbell, destination)
                 self.actions[si][sf] = required_action
-        print("Action Matrix Initialized")
 
     def fill_qmatrix(self):
         """ This contains the logic of the q-learning algorithm"""
@@ -120,6 +118,20 @@ class QLearn(object):
             else:
                 s = new_state
         print('\nQ-Learning algorithm completed!')
+        # manually resettin state so that dumbbells are at origin.
+        while not self.end_state(s):
+            all_actions = self.actions[s]
+            possible_actions = all_actions[all_actions>=0]
+            a = random.choice(possible_actions)
+            color, block = self.inverse_action(a)
+            print("Move", self.dumbbell_color(color), "to block", block)
+            rospy.sleep(1.0)
+            move = RobotMoveDBToBlock()
+            move.robot_db = self.dumbbell_color(color)
+            move.block_id = block
+            self.move_pub.publish(move)
+            rospy.sleep(1.0)
+            s = self.apply_action(s, a)
         try:
             print('The actions that give the highest reward are: ')
             optimal_actions = Actions()
