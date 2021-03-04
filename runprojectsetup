@@ -1,7 +1,0 @@
-#!/bin/csh -f
-
-gnome-terminal -x roslaunch q_learning_project turtlebot3_intro_robo_manipulation.launch
-gnome-terminal -x roslaunch turtlebot3_manipulation_moveit_config move_group.launch
-gnome-terminal -x rosrun q_learning_project phantom_robot_movement.py 
-
-

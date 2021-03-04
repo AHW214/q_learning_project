@@ -1,0 +1,14 @@
+<launch>
+  <!-- run phantom movement node -->
+  <node name="turtlebot3_phantom_movement" pkg="q_learning_project" type="phantom_robot_movement.py" respawn="true"/>
+
+  <!-- run q-algorithm node -->
+  <node name="q_learning_algorithm" pkg="q_learning_project" type="q_algorithm.py"/>
+
+  <!-- run arm controller node -->
+  <node name="q_learning_control_arm" pkg="q_learning_project" type="control_arm.py"/>
+
+  <!-- run robot action node -->
+  <node name="q_learning_robot_action" pkg="q_learning_project" type="robot_action.py"/>
+
+</launch>

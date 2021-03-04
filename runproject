@@ -1,4 +1,0 @@
-#!/bin/csh -f
-gnome-terminal -x pipenv shell "rosrun q_learning_project q_algorithm.py" 
-gnome-terminal -x pipenv shell "rosrun q_learning_project control_arm.py" 
-gnome-terminal -x pipenv shell "rosrun q_learning_project robot_action.py"

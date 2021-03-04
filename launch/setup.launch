@@ -1,0 +1,8 @@
+<launch>
+  <!-- run gazebo setup -->
+  <include file="$(find q_learning_project)/launch/turtlebot3_intro_robo_manipulation.launch"/>
+
+  <!-- run arm commander -->
+  <include file="$(find turtlebot3_manipulation_moveit_config)/launch/move_group.launch"/>
+
+</launch>

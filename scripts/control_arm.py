@@ -25,7 +25,7 @@ class Robot(object):
     def __init__(self):
 
         # initialize this node
-        rospy.init_node("control_arm")
+        rospy.init_node("q_learning_control_arm")
 
         # the interface to the group of joints making up the turtlebot3
         # openmanipulator arm

@@ -1,5 +1,0 @@
-#!/bin/csh -f
-# gnome-terminal -x pipenv shell "rosrun q_learning_project q_algorithm.py" 
-gnome-terminal -x rostopic pub /q_learning/optimal_actions q_learning_project/Actions "actions: [{robot_db: "red", block_id: 3}, {robot_db: "green", block_id: 1}, {robot_db: "blue", block_id: 2}]"
-gnome-terminal -x pipenv shell "rosrun q_learning_project control_arm.py" 
-gnome-terminal -x pipenv shell "rosrun q_learning_project robot_action.py"
