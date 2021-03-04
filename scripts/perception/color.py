@@ -1,3 +1,7 @@
+"""
+Perception of colors.
+"""
+
 # pyright: reportMissingTypeStubs=false
 
 from dataclasses import dataclass
@@ -7,21 +11,39 @@ import cv2
 from numpy import array
 import rospy_util.mathf as mathf
 
-from data.image import ImageBGR
-import data.image as image
+from perception.image import ImageBGR
+import perception.image as image
+
+__all__ = (
+    "HSV_CV2",
+    "Range",
+    "locate_color",
+    "hsv_cv2",
+    "hsv_range",
+)
 
 T = TypeVar("T")
+
+# HSV in CV2 specification.
 
 HSV_CV2 = NewType("HSV", Tuple[float, float, float])
 
 
 @dataclass
 class Range(Generic[T]):
+    """
+    A range [lower, upper] of some type.
+    """
+
     lower: T
     upper: T
 
 
 def locate_color(range: Range[HSV_CV2], img: ImageBGR) -> Optional[Tuple[int, int]]:
+    """
+    Locate the center point of pixels in the given color range.
+    """
+
     hsv = image.to_hsv(img)
 
     masked = cv2.inRange(
@@ -29,9 +51,6 @@ def locate_color(range: Range[HSV_CV2], img: ImageBGR) -> Optional[Tuple[int, in
         lowerb=array(range.lower),
         upperb=array(range.upper),
     )
-
-    # cv2.imshow("window", masked)
-    # cv2.waitKey(3)
 
     moments: Dict[str, int] = cv2.moments(masked)
 
@@ -49,8 +68,13 @@ def locate_color(range: Range[HSV_CV2], img: ImageBGR) -> Optional[Tuple[int, in
 
 
 def hsv_range(
-    lower: Tuple[float, float, float], upper: Tuple[float, float, float]
+    lower: Tuple[float, float, float],
+    upper: Tuple[float, float, float],
 ) -> Range[HSV_CV2]:
+    """
+    Create a range of CV2 HSV values.
+    """
+
     return Range(
         lower=hsv_cv2(*lower),
         upper=hsv_cv2(*upper),
@@ -58,6 +82,10 @@ def hsv_range(
 
 
 def hsv_cv2(hue: float, sat: float, val: float) -> HSV_CV2:
+    """
+    Create an HSV value in CV2 specification from standard HSV components.
+    """
+
     return HSV_CV2(
         (
             mathf.lerp(0, 179, hue / 360),

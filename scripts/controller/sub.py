@@ -1,6 +1,10 @@
+"""
+ROS controller subscriptions.
+"""
+
 # pyright: reportMissingTypeStubs=false
 
-from typing import Callable, TypeVar
+from typing import Callable, List, TypeVar
 
 from nav_msgs.msg import Odometry
 from rospy_util.controller import Sub
@@ -12,14 +16,21 @@ from q_learning_project.msg import Actions, ArmResult, RobotMoveDBToBlock
 
 
 __all__ = (
-    "none",
-    "q_learning_reward",
+    "arm_result",
+    "image_sensor",
+    "laser_scan",
+    "odometry",
+    "optimal_actions",
+    "robot_action",
 )
 
 Msg = TypeVar("Msg")
 
 
 def arm_result(to_msg: Callable[[ArmResult], Msg]) -> Sub[ArmResult, Msg]:
+    """
+    Receive the result of a command executed by the arm controller node.
+    """
     return Sub(
         topic_name="/q_learning/arm_res",
         message_type=ArmResult,
@@ -28,18 +39,24 @@ def arm_result(to_msg: Callable[[ArmResult], Msg]) -> Sub[ArmResult, Msg]:
 
 
 def optimal_actions(
-    to_msg: Callable[[Actions], Msg],
+    to_msg: Callable[[List[RobotMoveDBToBlock]], Msg],
 ) -> Sub[Actions, Msg]:
+    """
+    Receive the optimal actions to perform from the Q-algorithm node.
+    """
     return Sub(
         topic_name="/q_learning/optimal_actions",
         message_type=Actions,
-        to_msg=to_msg,
+        to_msg=lambda a: to_msg(a.actions),
     )
 
 
 def robot_action(
     to_msg: Callable[[RobotMoveDBToBlock], Msg],
 ) -> Sub[RobotMoveDBToBlock, Msg]:
+    """
+    Receive an action to perform.
+    """
     return Sub(
         topic_name="/q_learning/robot_action",
         message_type=RobotMoveDBToBlock,
@@ -48,6 +65,9 @@ def robot_action(
 
 
 def odometry(to_msg: Callable[[TurtlePose], Msg]) -> Sub[Odometry, Msg]:
+    """
+    Receive odometry sensor data.
+    """
     return Sub(
         topic_name="/odom",
         message_type=Odometry,
@@ -56,6 +76,9 @@ def odometry(to_msg: Callable[[TurtlePose], Msg]) -> Sub[Odometry, Msg]:
 
 
 def laser_scan(to_msg: Callable[[LaserScan], Msg]) -> Sub[LaserScan, Msg]:
+    """
+    Receive LiDAR sensor data.
+    """
     return Sub(
         topic_name="/scan",
         message_type=LaserScan,
@@ -64,6 +87,9 @@ def laser_scan(to_msg: Callable[[LaserScan], Msg]) -> Sub[LaserScan, Msg]:
 
 
 def image_sensor(to_msg: Callable[[Image], Msg]) -> Sub[Image, Msg]:
+    """
+    Receive image sensor data.
+    """
     return Sub(
         topic_name="/camera/rgb/image_raw",
         message_type=Image,
