@@ -12,6 +12,7 @@ name = "rospypi"
 numpy = "*"
 opencv-python = "*"
 cv-bridge = {version = "*", index = "rospypi"}
+gazebo-msgs = {version = "*", index = "rospypi"}
 geometry-msgs = {version = "*", index = "rospypi"}
 nav-msgs = {version = "*", index = "rospypi"}
 rospy = {version = "*", index = "rospypi"}
