@@ -37,15 +37,13 @@ that lead to future rewards are incremented in the q-matrix. This allows us to
 the robot’s current state. Eventually, the robot learns which actions will be
 rewarded the most in the future.
 
-### Gif 1 demonstrates the robot successfully executing the task
-
-Gif 1
+### The Q-matrix converges, and then TurtleBot3 performs the optimal three actions
 
 ![ShortQLearn](https://user-images.githubusercontent.com/68019178/109866278-b578de00-7c2a-11eb-8e42-add33781c6b7.gif)
 
 ## Q-learning algorithm description
 
-### The current script used for the q-learning algorithm is q-algorithm.py.
+#### The q-learning algorithm is implemented in [scripts/q_algorithm.py](scripts/q_algorithm.py).
 
 ### Selecting and executing actions for the robot (or phantom robot) to take
 
@@ -245,16 +243,12 @@ sentences per function / portion of code):
   when the message is “down”. Once the action is complete, the /res_arm topic is
   published with the message “done” signaling that the action is completed.
 
-### Gif 2 and Gif 3 demonstrate the robot orienting itself to the the dumbbell, picking up the dumbbell, moving a little bit, and setting the dumbbell down:
+### TurtleBot3 picks up and sets down dumbbells
 
-Note: The Gifs are much slower than real time, for some reason. The robot does
+Note: The GIFs are much slower than real time, for some reason. The robot does
 not actually go this slow. (It may depend on the computer you are viewing on)
 
-Gif 2
-
 ![MoveLiftSet (1)](https://user-images.githubusercontent.com/68019178/109749259-e102b680-7b9f-11eb-882b-97a5dbe9b70a.gif)
-
-Gif 3
 
 ![FirstLiftmoveSet](https://user-images.githubusercontent.com/68019178/109749277-e7912e00-7b9f-11eb-9497-275fcb495c96.gif)
 
