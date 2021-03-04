@@ -113,8 +113,6 @@ class Robot(object):
         else:
             self.moving = False
 
-        print(twist)
-
         self.twist_pub.publish(twist)
 
     def process_scan(self, data):
@@ -133,7 +131,6 @@ class Robot(object):
         ]
 
         if not front_ranges:
-            print("no front scan data")
             self.resp_pub.publish(ArmResult(error="no front scan data"))
             return
 
@@ -143,8 +140,6 @@ class Robot(object):
 
         dist_min = min(dists)
 
-        print(dir_min, dist_min)
-
         self.approach_dumbbell(dir_min, dist_min)
 
     def pickup_db(self):
@@ -152,44 +147,41 @@ class Robot(object):
         rate.sleep()
         self.moving = False  # boolean for moving toward db
         self.twist_pub.publish(Twist())  # stop moving
-        print("resetting position...")
+
         self.home_pose()
-        print("open gripper...")
+
         self.open_gripper()
-        print("reach_dumbbell..")
+
         self.reach_dumbbell()
-        print("moving toward db...")
+
         self.moving = True
         while self.moving == True:
             rospy.sleep(0.1)  # Wait for movement to stop
-        print("close gripper")
+
         self.close_gripper()
         rate.sleep()
-        print("lift dumbbell")
+
         self.lift_dumbbell()
         rate.sleep()
 
     def putdown_db(self):
         self.twist.linear.x = 0
         self.twist_pub.publish(Twist())  # stop
-        print("putting db down..")
+
         self.set_dumbbell()
         self.open_gripper()
         self.home_pose()
 
     def command_received(self, data: ArmCommand):
-        print("command received")
+
         response = ArmResult()
         if data.command == "up":
-            print("Move:picking up")
             self.pickup_db()
             response.result = "up"
         elif data.command == "down":
-            print("Move:putting down")
             self.putdown_db()
             response.result = "down"
         else:
-            print("Error: command_received: unknown command")
             response.error = "unknown command"
         self.resp_pub.publish(response)
 
