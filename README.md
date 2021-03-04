@@ -2,6 +2,10 @@
 
 **Team: Elizabeth Singer, Adam Weider, and Katie Hughes**
 
+## Setup
+
+See [SETUP](docs/SETUP.md) for instructions on setting up and running the project.
+
 ## Objectives Description
 
 Our goal was to use a Q learning algorithm and reinforcement learning to teach
@@ -41,9 +45,7 @@ rewarded the most in the future.
 
 ![ShortQLearn](https://user-images.githubusercontent.com/68019178/109866278-b578de00-7c2a-11eb-8e42-add33781c6b7.gif)
 
-## Q-learning algorithm description
-
-#### The q-learning algorithm is implemented in [scripts/q_algorithm.py](scripts/q_algorithm.py).
+## Q-learning algorithm
 
 ### Selecting and executing actions for the robot (or phantom robot) to take
 
@@ -89,7 +91,7 @@ rewarded the most in the future.
   not made and is set to 0 otherwise. The algorithm stops when self.count is
   equal to the threshold.
 
-### Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
+### Maximizing reward after the Q-Matrix has converged
 
 - To determine the most optimal path after the q-matrix has converged, we locate
   the current state of the robot, and look up the possible actions that can be
@@ -105,35 +107,64 @@ rewarded the most in the future.
   list of RobotMoveDBToBlock messages, in the order they should be executed. The
   following scripts subscribe to this topic to receive the actions.
 
-## Robot perception description
-
-Describe how you accomplished each of the following components of the perception
-elements of this project in 1-3 sentences, any online sources of
-information/code that helped you to recognize the objects, and also describe
-what functions / sections of the code executed each of these components (1-3
-sentences per function / portion of code):
+## Robot perception
 
 ### Identifying the locations and identities of each of the colored dumbbells
 
-- describe how you accomplished each of the following components of the
-  perception elements of this project in 1-3 sentences, any online sources of
-  information/code that helped you to recognize the objects
+- The colored dumbbells are identified using CV2 operations for masking colors in
+  images provided by the robot camera. The center pixel coordinates of the
+  current dumbbell color in the image are computed. If no coordinates are found,
+  the dumbbell is assumed to be out of frame, and the robot rotates to have the
+  dumbbell enter into frame. Once the center of the color is determined, the
+  x-offset from the center of the image is used to compute an error factor for
+  the alignment of the TurtleBot and the dumbbell. Proportional control is
+  applied to this error for finding the appropriate angular velocity at which
+  to face the dumbbell of interest.
 
-- describe what functions / sections of the code executed each of these
-  components (1-3 sentences per function / portion of code)
+- `scripts/perception/color.py`
+  - `locate_color(range, img)` - Locate the center of the given HSV color range
+    `range` in the image `img`. CV2 operations are used to mask the image,
+    calculate the resulting moments, and compute the pixel center of the color
+    range. If the center cannot be computed, `None` is returned.
 
-- add pictures, Youtube videos, and/or embedded animated gifs
+- `scripts/robot_action.py`
+  - Lines 559-578 of `update(msg, model)` - Dumbbell alignment error is computed
+    using `locate_color` applied to the color range for the target dumbbell. If
+    the center of the color range cannot be found (i.e. if no objects with such
+    colors are present in the image), the bot begins turning slowly to allow the
+    dumbbell to enter into view. If the alignment error is under a set threshold
+    close to zero, the bot switches states to begin approaching the dumbbell.
+    Otherwise, proportional control is used to compute an appropriate angular
+    velocity for rotating the bot to face the dumbbell.
 
 ### Identifying the locations and identities of each of the numbered blocks
 
-- describe how you accomplished each of the following components of the
-  perception elements of this project in 1-3 sentences, any online sources of
-  information/code that helped you to recognize the objects,
+- When TurtleBot has a dumbbell grasped, it rotates around to the general
+  location of the blocks. Two orientations are specified at which to perform
+  OCR, one between the left and center block, and one between the center and
+  right block. Two orientations are used as, from the distance of the dumbbells,
+  the blocks cannot all fit inside the field of view of the camera; having two
+  perspectives guarantees all blocks are subject to an OCR pass. Like when
+  facing toward the dumbbells, the center pixel coordinates of the bounding box
+  on the recognized character are found, and the x-offset from the center of the
+  image is used to compute angular error. Proportional control is used to
+  compute the appropriate angular velocity for facing the target block.
 
-- describe what functions / sections of the code executed each of these
-  components (1-3 sentences per function / portion of code)
+- `scripts/perception/ocr.py`
+  - `locate_number(pipeline, num, img)` - Use the given Keras OCR `pipeline` to
+    detect the most front-facing instance of the number `num` in image `img`.
+    The result with the bounding box of maximum width is selected as the
+    instance of the number oriented most towards the front. If no instance of
+    the number are found in the image, `None` is returned.
 
-- add pictures, Youtube videos, and/or embedded animated gifs
+- `scripts/robot_action.py`
+  - Lines 447-471 of `update(msg, model)` - Block alignment error is computed
+    using `locate_number` applied to the number for the target block. If no
+    instance of the number is found, the bot switches states to rotate towards
+    the next vantage point from which to perform OCR. If an instance is found,
+    the direction to the block is computed from the pixel coordinates of the
+    number, and then the bot switches states to begin rotating, aligning its own
+    direction with that to the block.
 
 ## Robot manipulation and movement
 
@@ -218,13 +249,30 @@ sentences per function / portion of code):
 
 ### Moving to the desired destination (numbered block) with the dumbbell
 
-- Describe how you accomplished each of the following components of the robot
-  manipulation and movement elements of this project in 1-3 sentences
+- Unfortunately OCR passes require a significant amount of time, on the order of
+  seconds, while image data is received on the order of hundreds of milliseconds.
+  Thus, angular error cannot be computed at a sufficient speed to adjust the
+  alignment of the bot in real time as it approaches the target block. To
+  compensate for this, we have the bot stop when about halfway to the general
+  location of the block. The bot repeats the OCR pass and alignment step performed
+  previously, thus mitigating angular error which may have developed when moving
+  toward the block. Finally, the bot continues to approach the block, adjusting
+  only linear velocity via error calculated with closest obstacle distance from
+  LiDAR range data.
 
-- describe what functions / sections of the code executed each of these
-  components (1-3 sentences per function / portion of code)
-
-- add pictures, Youtube videos, and/or embedded animated gifs
+- `scripts/robot_action.py`
+  - Lines 496-526 of `update(msg, model)` - A distance at which to perform
+    re-alignment with the block is computed according to the number of remaining
+    alignments for the trajectory toward the block (we use a starting value of
+    1, so re-alignment only happens once, though the value could be customized
+    for different behaviors). If the bot is under the alignment distance to the
+    block, then it switches states to run an OCR pass, compute the rotation to
+    the number on the block, and re-align with the block. Otherwise, if the
+    bot is within a set stopping distance to the block, the bot switches states
+    to stop movement and begin placing the dumbbell down. Otherwise, error is
+    calculated using the LiDAR scan ranges, and proportional control is applied
+    to this error to compute an appropriate linear velocity for approaching the
+    block.
 
 ### Putting the dumbbell back down at the desired destination
 
@@ -336,7 +384,6 @@ not actually go this slow. (It may depend on the computer you are viewing on)
   But this form was relatively simple and straightforward to implement. The
   phantom manipulator definitely sped up the learning process.
 
-### Video 1 demonstrates our roboot successfully executing the task following the Q matrix converging
+### TurtleBot3 executes optimal actions following convergence of the Q-matrix
 
-Video 1
-https://www.youtube.com/watch?v=0v7KDNA4S6s
+[Video here](https://www.youtube.com/watch?v=0v7KDNA4S6s)
