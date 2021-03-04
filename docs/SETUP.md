@@ -16,18 +16,18 @@
     $ pipenv install
     ```
 
+    This may appear to hang for a bit. It shouldn't be indefinite, though if it
+    happens to be, contact us and we will help debug.
+
 4) In one terminal, run the launch file for setting up the project environment.
     ```
     $ roslaunch q_learning_project setup.launch
     ```
 
-5) In a second terminal, launch a shell in the virtual environment containing
-    the installed packages.
-    ```
-    $ pipenv shell
-    ```
+5) Unpause time in Gazebo.
 
-6) In the second terminal, run the launch file for starting the various ROS nodes.
+6) In a second terminal, run the launch file for starting the various ROS nodes
+   within the virtual python environment.
     ```
-    $ roslaunch q_learning_project run.launch
+    $ pipenv run roslaunch q_learning_project run.launch
     ```
